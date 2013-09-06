@@ -31,3 +31,7 @@ $ echo "{\"longUrl\": \"http://github.com/imjasonh/googlecl\"}" | go run googlec
  "longUrl": "http://github.com/imjasonh/googlecl"
 }
 ```
+
+Users can use a tool like [jq][1] to slice and dice responses and create request body data.
+
+[1]: http://stedolan.github.io/jq/
