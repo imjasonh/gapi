@@ -14,7 +14,6 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -55,7 +54,7 @@ func main() {
 	if cmd == "" {
 		log.Fatal("Must specify command or API name")
 	}
-	if cmdFn, found := cmds[flag.Arg(0)]; found {
+	if cmdFn, found := cmds[cmd]; found {
 		cmdFn()
 		return
 	}
