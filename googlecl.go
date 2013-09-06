@@ -94,7 +94,7 @@ func main() {
 		log.Fatalf("Can't find requested method %s", method)
 	}
 
-	m.call(fs, apiName, v)
+	m.call(fs, api, apiName, v)
 }
 
 func findMethod(method string, api Api) *Method {
@@ -161,8 +161,9 @@ func getAndParse(url string, v interface{}) error {
 }
 
 type Api struct {
-	Resources map[string]Resource
-	Methods   map[string]Method
+	Resources  map[string]Resource
+	Methods    map[string]Method
+	Parameters map[string]Parameter
 }
 
 type Resource struct {
@@ -175,28 +176,13 @@ type Method struct {
 	Parameters           map[string]Parameter
 }
 
-func (m Method) call(fs map[string]string, apiName, version string) {
+func (m Method) call(fs map[string]string, api *Api, apiName, version string) {
 	url := fmt.Sprintf("https://www.googleapis.com/%s/%s/%s", apiName, version, m.Path)
 	for k, p := range m.Parameters {
-		v := flagValue(fs, k)
-		if v == "" {
-			v = p.Default
-		}
-		if v == "" {
-			continue
-		}
-		if p.Location == "path" {
-			t := fmt.Sprintf("{%s}", k)
-			if p.Required && v == "" {
-				log.Printf("Missing required parameter %s", k)
-			}
-			url = strings.Replace(url, t, v, -1)
-		} else if p.Location == "query" {
-			if !strings.Contains(url, "?") {
-				url += "?"
-			}
-			url += fmt.Sprintf("&%s=%s", k, v)
-		}
+		url = p.process(k, fs, url)
+	}
+	for k, p := range api.Parameters {
+		url = p.process(k, fs, url)
 	}
 
 	var body io.Reader
@@ -235,4 +221,27 @@ func (m Method) call(fs map[string]string, apiName, version string) {
 type Parameter struct {
 	Type, Description, Location, Default string
 	Required                             bool
+}
+
+func (p Parameter) process(k string, fs map[string]string, url string) string {
+	v := flagValue(fs, k)
+	if v == "" {
+		v = p.Default
+	}
+	if v == "" {
+		return url
+	}
+	if p.Location == "path" {
+		t := fmt.Sprintf("{%s}", k)
+		if p.Required && v == "" {
+			log.Printf("Missing required parameter %s", k)
+		}
+		return strings.Replace(url, t, v, -1)
+	} else if p.Location == "query" {
+		if !strings.Contains(url, "?") {
+			url += "?"
+		}
+		return url + fmt.Sprintf("&%s=%s", k, v)
+	}
+	return url
 }
