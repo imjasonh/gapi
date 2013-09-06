@@ -41,16 +41,21 @@ func parseArgs(args []string) map[string]string {
 		}
 
 		if !strings.Contains(a, "=") {
-			a += "=true"
+			m[a] = "true"
+		} else {
+			parts := strings.SplitN(a, "=", 2)
+			m[parts[0]] = parts[1]
 		}
-
-		parts := strings.SplitN(a, "=", 2)
-		m[parts[0]] = parts[1]
 	}
 	return m
 }
 
 func main() {
+	if len(os.Args) == 1 {
+		cmds["help"]()
+		return
+	}
+
 	cmd := os.Args[1]
 	if cmd == "" {
 		log.Fatal("Must specify command or API name")
