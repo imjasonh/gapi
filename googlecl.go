@@ -6,7 +6,8 @@
 //
 // $ googlecl calendar calendars.get --calendarId=12345  # prints JSON API response
 //
-// $ cat someEvent.json | googlecl calendar events.insert --calendarId=12345  # inserts an event
+// $ cat someEvent.json | googlecl calendar events.insert --calendarId=12345 --in  # inserts an event
+// $ googlecl calendar events.insert --calendarId=12345 --inFile=someEvent.json    # equivalent to above
 //
 // TODO: Handle auth somehow.
 
@@ -186,10 +187,21 @@ func (m Method) call(fs map[string]string, apiName, version string) {
 			url += fmt.Sprintf("&%s=%s", k, v)
 		}
 	}
-	log.Print(url)
 
-	// TODO: Support reading JSON from stdin to pass to request
-	r, err := http.NewRequest(m.HttpMethod, url, nil)
+	var body io.Reader
+	if v, found := fs["in"]; found && v == "true" {
+		// If user passes the --in flag, use stdin as the request body
+		body = os.Stdin
+	} else if v, found := fs["inFile"]; found {
+		// If user passes --inFile flag, open that file and use its content as request body
+		var err error
+		body, err = os.Open(v)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	r, err := http.NewRequest(m.HttpMethod, url, body)
 	if err != nil {
 		log.Fatal(err)
 	}
