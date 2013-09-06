@@ -10,6 +10,8 @@
 // $ googlecl calendar events.insert --calendarId=12345 --inFile=someEvent.json    # equivalent to above
 //
 // TODO: Handle auth somehow.
+// TODO: Cache discovery/directory documents for faster requests.
+// TODO: Handle media upload/download.
 
 package main
 
@@ -94,7 +96,7 @@ func main() {
 		log.Fatalf("Can't find requested method %s", method)
 	}
 
-	m.call(fs, api, apiName, v)
+	m.call(fs, api)
 }
 
 func findMethod(method string, api Api) *Method {
@@ -161,6 +163,7 @@ func getAndParse(url string, v interface{}) error {
 }
 
 type Api struct {
+	BasePath   string
 	Resources  map[string]Resource
 	Methods    map[string]Method
 	Parameters map[string]Parameter
@@ -176,8 +179,8 @@ type Method struct {
 	Parameters           map[string]Parameter
 }
 
-func (m Method) call(fs map[string]string, api *Api, apiName, version string) {
-	url := fmt.Sprintf("https://www.googleapis.com/%s/%s/%s", apiName, version, m.Path)
+func (m Method) call(fs map[string]string, api *Api) {
+	url := fmt.Sprintf("https://www.googleapis.com/%s%s", api.BasePath, m.Path)
 	for k, p := range m.Parameters {
 		url = p.process(k, fs, url)
 	}
