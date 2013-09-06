@@ -179,6 +179,12 @@ func (m Method) call(fs map[string]string, apiName, version string) {
 	url := fmt.Sprintf("https://www.googleapis.com/%s/%s/%s", apiName, version, m.Path)
 	for k, p := range m.Parameters {
 		v := flagValue(fs, k)
+		if v == "" {
+			v = p.Default
+		}
+		if v == "" {
+			continue
+		}
 		if p.Location == "path" {
 			t := fmt.Sprintf("{%s}", k)
 			if p.Required && v == "" {
@@ -227,6 +233,6 @@ func (m Method) call(fs map[string]string, apiName, version string) {
 }
 
 type Parameter struct {
-	Type, Description, Location string
-	Required                    bool
+	Type, Description, Location, Default string
+	Required                             bool
 }
