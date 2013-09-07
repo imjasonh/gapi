@@ -12,6 +12,7 @@
 // TODO: Handle auth somehow.
 // TODO: Cache discovery/directory documents for faster requests.
 // TODO: Handle media upload/download.
+// TODO: Handle repeated parameters.
 
 package main
 
