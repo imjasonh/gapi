@@ -194,7 +194,7 @@ func getAndParse(url string, v interface{}) error {
 }
 
 type Api struct {
-	BasePath   string
+	BaseUrl    string
 	Resources  map[string]Resource
 	Methods    map[string]Method
 	Parameters map[string]Parameter
@@ -216,7 +216,7 @@ func (m Method) call(fs map[string]string, api *Api) {
 		log.Fatalf("This method requires scopes %s", strings.Join(m.Scopes, " "))
 	}
 
-	url := fmt.Sprintf("https://www.googleapis.com/%s%s", api.BasePath, m.Path)
+	url := api.BaseUrl + m.Path
 	for k, p := range m.Parameters {
 		url = p.process(k, fs, url)
 	}
