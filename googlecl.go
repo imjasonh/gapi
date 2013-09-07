@@ -55,7 +55,10 @@ func accessTokenFromPemFile(iss, scope, path string) (string, error) {
 
 	t := jwt.NewToken(iss, scope, pb.Bytes)
 	tok, err := t.Assert(&http.Client{})
-	return tok, err
+	if err != nil {
+		return "", err
+	}
+	return tok.AccessToken, nil
 }
 
 func parseArgs(args []string) map[string]string {
@@ -204,9 +207,14 @@ type Resource struct {
 type Method struct {
 	Id, Path, HttpMethod string
 	Parameters           map[string]Parameter
+	Scopes               []string
 }
 
 func (m Method) call(fs map[string]string, api *Api) {
+	if m.Scopes != nil {
+		log.Fatalf("This method requires scopes %s", strings.Join(m.Scopes, " "))
+	}
+
 	url := fmt.Sprintf("https://www.googleapis.com/%s%s", api.BasePath, m.Path)
 	for k, p := range m.Parameters {
 		url = p.process(k, fs, url)
