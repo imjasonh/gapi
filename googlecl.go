@@ -17,18 +17,45 @@ package main
 
 import (
 	"encoding/json"
+	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+
+	"code.google.com/p/goauth2/oauth/jwt"
 )
 
 var cmds = map[string]func(){
 	"help":     func() { log.Fatal("TODO: implement help command") },
 	"list":     func() { log.Fatal("TODO: implement list command") },
 	"describe": func() { log.Fatal("TODO: implement describe command") },
+}
+
+func accessTokenFromPemFile(iss, scope, path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	b, err := ioutil.ReadAll(f)
+	if err != nil {
+		return "", err
+	}
+
+	pb, _ := pem.Decode(b)
+	if len(pb.Bytes) == 0 {
+		return "", errors.New("No PEM data found")
+	}
+
+	t := jwt.NewToken(iss, scope, pb.Bytes)
+	tok, err := t.Assert(&http.Client{})
+	return tok, err
 }
 
 func parseArgs(args []string) map[string]string {
