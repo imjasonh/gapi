@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -32,55 +33,66 @@ import (
 )
 
 var cmds = map[string]func(){
-	"help":     func() { log.Fatal("TODO: implement help command") },
+	"help":     help,
 	"list":     func() { log.Fatal("TODO: implement list command") },
 	"describe": func() { log.Fatal("TODO: implement describe command") },
 }
 
-func accessTokenFromPemFile(iss, scope, path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
+var (
+	flagset = flag.NewFlagSet("", flag.ExitOnError)
 
-	b, err := ioutil.ReadAll(f)
-	if err != nil {
-		return "", err
-	}
+	flagPem    = flagset.String("meta.pem", "", "Location of .pem file")
+	flagIss    = flagset.String("meta.iss", "", "Service account email address")
+	flagStdin  = flagset.Bool("meta.in", false, "Accept request body from stdin")
+	flagInFile = flagset.String("meta.inFile", "", "File to pass as request body")
+)
 
-	pb, _ := pem.Decode(b)
-	if len(pb.Bytes) == 0 {
-		return "", errors.New("No PEM data found")
-	}
-
-	t := jwt.NewToken(iss, scope, pb.Bytes)
-	tok, err := t.Assert(&http.Client{})
-	if err != nil {
-		return "", err
-	}
-	return tok.AccessToken, nil
-}
-
-func parseArgs(args []string) map[string]string {
-	m := make(map[string]string)
-	for _, a := range args {
-		if strings.HasPrefix(a, "--") {
-			a = a[2:]
-		} else if strings.HasPrefix(a, "-") {
-			a = a[1:]
-		} else {
-			log.Fatalf("Invalid flag format %s", a)
+func help() {
+	args := len(os.Args)
+	if args < 3 || args > 4 {
+		fmt.Println("Makes requests to Google APIs")
+		fmt.Println("Usage:")
+		fmt.Println("googlecl <api> <method> --param=foo")
+		fmt.Println("Flags:")
+		flagset.VisitAll(func (f *flag.Flag) {
+			fmt.Printf("--%s - %s\n", f.Name, f.Usage)
+		})
+	} else {
+		apiName := os.Args[2]
+		v, err := getPreferredVersion(apiName)
+		if err != nil {
+			log.Fatal(err)
 		}
+		api, err := loadApi(apiName, v)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if args == 3 {
+			fmt.Println(api.Title, api.Description)
+			fmt.Println("Methods:")
+			for _, m := range api.Methods {
+				fmt.Println(m.Id, m.Description)
+			}
+			for _, r := range api.Resources {
+				for _, m := range r.Methods {
+					fmt.Printf("%s - %s\n", m.Id, m.Description)
+				}
+			}
+			// TODO: Print methods of nested resources
 
-		if !strings.Contains(a, "=") {
-			m[a] = "true"
-		} else {
-			parts := strings.SplitN(a, "=", 2)
-			m[parts[0]] = parts[1]
+		} else if args == 4 {
+			method := os.Args[3]
+			m := findMethod(method, *api)
+			fmt.Println(method, m.Description)
+			fmt.Println("Parameters:")
+			for k, p := range m.Parameters {
+				fmt.Printf("--%s (%s) - %s\n", k, p.Type, p.Description)
+			}
+			for k, p := range api.Parameters {
+				fmt.Printf("--%s (%s) - %s\n", k, p.Type, p.Description)
+			}
 		}
 	}
-	return m
 }
 
 func main() {
@@ -90,9 +102,6 @@ func main() {
 	}
 
 	cmd := os.Args[1]
-	if cmd == "" {
-		log.Fatal("Must specify command or API name")
-	}
 	if cmdFn, found := cmds[cmd]; found {
 		cmdFn()
 		return
@@ -104,30 +113,35 @@ func main() {
 	}
 
 	apiName := cmd
-	fs := parseArgs(os.Args[3:])
-	v := flagValue(fs, "v")
-	if v == "" {
-		// Look up preferred version in Directory
-		var err error
-		v, err = getPreferredVersion(apiName)
-		if err != nil {
-			log.Fatal(err)
-		}
+	// Look up preferred version in Directory
+	// TODO: Support non-preferred versions
+	v, err := getPreferredVersion(apiName)
+	if err != nil {
+		log.Fatal(err)
 	}
+
 	api, err := loadApi(apiName, v)
 	if err != nil {
 		log.Fatal(err)
 	}
 	if api == nil || (len(api.Resources) == 0 && len(api.Methods) == 0) {
-		log.Fatalf("Couldn't load API %s %s", apiName, v)
+		log.Fatal("Couldn't load API ", apiName, v)
 	}
 
 	m := findMethod(method, *api)
 	if m == nil {
-		log.Fatalf("Can't find requested method %s", method)
+		log.Fatal("Can't find requested method ", method)
 	}
 
-	m.call(fs, api)
+	for k, p := range api.Parameters {
+		flagset.String(k, p.Default, p.Description)
+	}
+	for k, p := range m.Parameters {
+		flagset.String(k, p.Default, p.Description)
+	}
+	flagset.Parse(os.Args[3:])
+
+	m.call(api)
 }
 
 func findMethod(method string, api Api) *Method {
@@ -150,23 +164,26 @@ func findMethod(method string, api Api) *Method {
 	return &m
 }
 
-func flagValue(fs map[string]string, k string) string {
-	v, found := fs[k]
-	if !found {
+func flagValue(k string) string {
+	f := flagset.Lookup(k)
+	if f == nil {
 		return ""
 	}
-	return v
+	return f.Value.String()
 }
 
-func getPreferredVersion(api string) (string, error) {
+func getPreferredVersion(apiName string) (string, error) {
 	var d struct {
 		Items []struct {
 			Version string
 		}
 	}
-	err := getAndParse(fmt.Sprintf("https://www.googleapis.com/discovery/v1/apis?preferred=true&name=%s&fields=items/version", api), &d)
+	err := getAndParse(fmt.Sprintf("https://www.googleapis.com/discovery/v1/apis?preferred=true&name=%s&fields=items/version", apiName), &d)
 	if err != nil {
 		return "", err
+	}
+	if d.Items == nil {
+		log.Fatal("Could not load API ", apiName)
 	}
 	return d.Items[0].Version, nil
 }
@@ -194,10 +211,10 @@ func getAndParse(url string, v interface{}) error {
 }
 
 type Api struct {
-	BaseUrl    string
-	Resources  map[string]Resource
-	Methods    map[string]Method
-	Parameters map[string]Parameter
+	BaseUrl, Title, Description string
+	Resources                   map[string]Resource
+	Methods                     map[string]Method
+	Parameters                  map[string]Parameter
 }
 
 type Resource struct {
@@ -206,32 +223,42 @@ type Resource struct {
 }
 
 type Method struct {
-	Id, Path, HttpMethod string
+	Id, Path, HttpMethod, Description string
 	Parameters           map[string]Parameter
 	Scopes               []string
 }
 
-func (m Method) call(fs map[string]string, api *Api) {
+func (m Method) call(api *Api) {
 	if m.Scopes != nil {
-		log.Fatalf("This method requires scopes %s", strings.Join(m.Scopes, " "))
+		scope := strings.Join(m.Scopes, " ")
+		if flagPem != nil && flagIss != nil {
+			// TODO: Get iss from client_secrets.json
+			tok, err := accessTokenFromPemFile(*flagIss, scope, *flagPem)
+			if err != nil {
+				log.Fatal(err)
+			}
+			log.Print(tok)
+		} else {
+			log.Fatal("This method requires access to API scopes: ", scope)
+		}
 	}
 
 	url := api.BaseUrl + m.Path
 	for k, p := range m.Parameters {
-		url = p.process(k, fs, url)
+		url = p.process(k, url)
 	}
 	for k, p := range api.Parameters {
-		url = p.process(k, fs, url)
+		url = p.process(k, url)
 	}
 
 	var body io.Reader
-	if v, found := fs["in"]; found && v == "true" {
+	if *flagStdin {
 		// If user passes the --in flag, use stdin as the request body
 		body = os.Stdin
-	} else if v, found := fs["inFile"]; found {
+	} else if *flagInFile != "" {
 		// If user passes --inFile flag, open that file and use its content as request body
 		var err error
-		body, err = os.Open(v)
+		body, err = os.Open(*flagInFile)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -249,12 +276,35 @@ func (m Method) call(fs map[string]string, api *Api) {
 	}
 	defer resp.Body.Close()
 
+	io.Copy(os.Stderr, resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		io.Copy(os.Stderr, resp.Body)
 		os.Exit(1)
-	} else {
-		io.Copy(os.Stdout, resp.Body)
 	}
+}
+
+func accessTokenFromPemFile(iss, scope, path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	b, err := ioutil.ReadAll(f)
+	if err != nil {
+		return "", err
+	}
+
+	pb, _ := pem.Decode(b)
+	if len(pb.Bytes) == 0 {
+		return "", errors.New("No PEM data found")
+	}
+
+	t := jwt.NewToken(iss, scope, pb.Bytes)
+	tok, err := t.Assert(&http.Client{})
+	if err != nil {
+		return "", err
+	}
+	return tok.AccessToken, nil
 }
 
 type Parameter struct {
@@ -262,18 +312,15 @@ type Parameter struct {
 	Required                             bool
 }
 
-func (p Parameter) process(k string, fs map[string]string, url string) string {
-	v := flagValue(fs, k)
-	if v == "" {
-		v = p.Default
-	}
+func (p Parameter) process(k string, url string) string {
+	v := flagValue(k)
 	if v == "" {
 		return url
 	}
 	if p.Location == "path" {
 		t := fmt.Sprintf("{%s}", k)
 		if p.Required && v == "" {
-			log.Printf("Missing required parameter %s", k)
+			log.Print("Missing required parameter ", k)
 		}
 		return strings.Replace(url, t, v, -1)
 	} else if p.Location == "query" {
