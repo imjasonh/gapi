@@ -32,7 +32,7 @@ var (
 	flagset = flag.NewFlagSet("", flag.ExitOnError)
 
 	flagPem    = flagset.String("meta.pem", "", "Location of .pem file")
-	flagIss    = flagset.String("meta.iss", "", "Service account email address")
+	flagSecrets = flagset.String("meta.secrets", "", "Location of client_secrets.json")
 	flagStdin  = flagset.Bool("meta.in", false, "Accept request body from stdin")
 	flagInFile = flagset.String("meta.inFile", "", "File to pass as request body")
 )
@@ -250,9 +250,8 @@ type Method struct {
 func (m Method) call(api *API) {
 	if m.Scopes != nil {
 		scope := strings.Join(m.Scopes, " ")
-		if flagPem != nil && flagIss != nil {
-			// TODO: Get iss from client_secrets.json
-			tok, err := accessTokenFromPemFile(*flagIss, scope, *flagPem)
+		if flagPem != nil && flagSecrets != nil {
+			tok, err := accessTokenFromPemFile(scope, *flagPem, *flagSecrets)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -301,24 +300,43 @@ func (m Method) call(api *API) {
 	}
 }
 
-func accessTokenFromPemFile(iss, scope, path string) (string, error) {
-	f, err := os.Open(path)
+func accessTokenFromPemFile(scope, pemPath, secretsPath string) (string, error) {
+	pemFile, err := os.Open(pemPath)
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
-
-	b, err := ioutil.ReadAll(f)
+	defer pemFile.Close()
+	keyBytes, err := ioutil.ReadAll(pemFile)
 	if err != nil {
 		return "", err
 	}
-
-	pb, _ := pem.Decode(b)
+	pb, _ := pem.Decode(keyBytes)
 	if len(pb.Bytes) == 0 {
 		return "", errors.New("No PEM data found")
 	}
 
-	t := jwt.NewToken(iss, scope, pb.Bytes)
+	secretsFile, err := os.Open(secretsPath)
+	if err != nil {
+		return "", err
+	}
+	defer secretsFile.Close()
+	secretsBytes, err := ioutil.ReadAll(secretsFile)
+	if err != nil {
+		return "", err
+	}
+	var config struct {
+		Web struct {
+                        ClientEmail string `json:"client_email"`
+                        TokenURI    string `json:"token_uri"`
+                }
+        }
+	err = json.Unmarshal(secretsBytes, &config)
+	if err != nil {
+		return "", err
+	}
+
+	t := jwt.NewToken(config.Web.ClientEmail, scope, pb.Bytes)
+	t.ClaimSet.Aud = config.Web.TokenURI
 	tok, err := t.Assert(&http.Client{})
 	if err != nil {
 		return "", err

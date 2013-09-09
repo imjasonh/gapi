@@ -20,3 +20,7 @@ _cgo_export.*
 _testmain.go
 
 *.exe
+
+# Secret secrets
+client_secrets.json
+*.pem
