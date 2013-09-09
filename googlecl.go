@@ -1,18 +1,9 @@
-// Usage: (uh, eventually, once all of this is implemented...)
-// $ googlecl help  # prints help
-// $ googlecl list  # lists all available APIs
-// $ googlecl describe calendar                          # describes all methods available in Calendar API
-// $ googlecl describe calendar calendars.get            # describes one method in Calendar API
-//
-// $ googlecl calendar calendars.get --calendarId=12345  # prints JSON API response
-//
-// $ cat someEvent.json | googlecl calendar events.insert --calendarId=12345 --in  # inserts an event
-// $ googlecl calendar events.insert --calendarId=12345 --inFile=someEvent.json    # equivalent to above
-//
-// TODO: Handle auth somehow.
+// TODO: Handle user auth.
+// TODO: Verify service account auth actually works.
 // TODO: Cache discovery/directory documents for faster requests.
 // TODO: Handle media upload/download.
 // TODO: Handle repeated parameters.
+// TODO: Support Cloud Endpoints APIs.
 
 package main
 
@@ -33,9 +24,8 @@ import (
 )
 
 var cmds = map[string]func(){
-	"help":     help,
-	"list":     func() { log.Fatal("TODO: implement list command") },
-	"describe": func() { log.Fatal("TODO: implement describe command") },
+	"help": help,
+	"list": list,
 }
 
 var (
@@ -69,6 +59,7 @@ func help() {
 		}
 		if args == 3 {
 			fmt.Println(api.Title, api.Description)
+			fmt.Println("More information:", api.DocumentationLink)
 			fmt.Println("Methods:")
 			for _, m := range api.Methods {
 				fmt.Println(m.Id, m.Description)
@@ -105,15 +96,30 @@ func help() {
 	}
 }
 
+func list() {
+	var directory struct {
+		Items []struct {
+			Name, Version, Description string
+		}
+	}
+	getAndParse("https://www.googleapis.com/discovery/v1/apis", &directory)
+	fmt.Println("Available methods:")
+	for _, i := range directory.Items {
+		fmt.Printf("%s %s - %s\n", i.Name, i.Version, i.Description)
+	}
+}
+
 func main() {
 	if len(os.Args) == 1 {
-		cmds["help"]()
+		help()
 		return
 	}
-
 	cmd := os.Args[1]
-	if cmdFn, found := cmds[cmd]; found {
-		cmdFn()
+	if cmd == "help" {
+		help()
+		return
+	} else if cmd == "list" {
+		list()
 		return
 	}
 
@@ -221,10 +227,10 @@ func getAndParse(url string, v interface{}) error {
 }
 
 type Api struct {
-	BaseUrl, Title, Description string
-	Resources                   map[string]Resource
-	Methods                     map[string]Method
-	Parameters                  map[string]Parameter
+	BaseUrl, Title, Description, DocumentationLink string
+	Resources                                      map[string]Resource
+	Methods                                        map[string]Method
+	Parameters                                     map[string]Parameter
 }
 
 type Resource struct {
