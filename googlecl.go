@@ -23,11 +23,6 @@ import (
 	"code.google.com/p/goauth2/oauth/jwt"
 )
 
-var cmds = map[string]func(){
-	"help": help,
-	"list": list,
-}
-
 var (
 	flagset = flag.NewFlagSet("", flag.ExitOnError)
 
@@ -45,7 +40,7 @@ func help() {
 		fmt.Println("googlecl <api> <method> --param=foo")
 		fmt.Println("Flags:")
 		flagset.VisitAll(func(f *flag.Flag) {
-			fmt.Printf("--%s - %s\n", f.Name, f.Usage)
+			fmt.Printf("  --%s - %s\n", f.Name, f.Usage)
 		})
 	} else {
 		apiName := os.Args[2]
@@ -83,10 +78,10 @@ func help() {
 			fmt.Println(method, m.Description)
 			fmt.Println("Parameters:")
 			for k, p := range m.Parameters {
-				fmt.Printf("--%s (%s) - %s\n", k, p.Type, p.Description)
+				fmt.Printf("  --%s (%s) - %s\n", k, p.Type, p.Description)
 			}
 			for k, p := range api.Parameters {
-				fmt.Printf("--%s (%s) - %s\n", k, p.Type, p.Description)
+				fmt.Printf("  --%s (%s) - %s\n", k, p.Type, p.Description)
 			}
 		}
 	}
@@ -133,10 +128,6 @@ func main() {
 	}
 
 	m := findMethod(method, *api)
-	if m == nil {
-		log.Fatal("Can't find requested method ", method)
-	}
-
 	for k, p := range api.Parameters {
 		flagset.String(k, p.Default, p.Description)
 	}
@@ -144,7 +135,6 @@ func main() {
 		flagset.String(k, p.Default, p.Description)
 	}
 	flagset.Parse(os.Args[3:])
-
 	m.call(api)
 }
 
@@ -153,27 +143,19 @@ func findMethod(method string, api API) *Method {
 	var ms map[string]Method
 	rs := api.Resources
 	for i := 0; i < len(parts)-1; i++ {
-		r, found := rs[parts[i]]
-		if !found {
-			return nil
+		r := rs[parts[i]]
+		if &r == nil {
+			log.Fatal("Could not find requested method ", method)
 		}
 		rs = r.Resources
 		ms = r.Methods
 	}
-	lp := parts[len(parts)-1:][0]
-	m, found := ms[lp]
-	if !found {
-		return nil
+	lp := parts[len(parts)-1]
+	m := ms[lp]
+	if &m == nil {
+		log.Fatal("Could not find requested method ", method)
 	}
 	return &m
-}
-
-func flagValue(k string) string {
-	f := flagset.Lookup(k)
-	if f == nil {
-		return ""
-	}
-	return f.Value.String()
 }
 
 func getPreferredVersion(apiName string) (string, error) {
@@ -350,7 +332,11 @@ type Parameter struct {
 }
 
 func (p Parameter) process(k string, url string) string {
-	v := flagValue(k)
+	f := flagset.Lookup(k)
+	if f == nil {
+		return url
+	}
+	v := f.Value.String()
 	if v == "" {
 		return url
 	}
