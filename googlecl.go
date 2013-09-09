@@ -54,7 +54,7 @@ func help() {
 		fmt.Println("Usage:")
 		fmt.Println("googlecl <api> <method> --param=foo")
 		fmt.Println("Flags:")
-		flagset.VisitAll(func (f *flag.Flag) {
+		flagset.VisitAll(func(f *flag.Flag) {
 			fmt.Printf("--%s - %s\n", f.Name, f.Usage)
 		})
 	} else {
@@ -73,13 +73,23 @@ func help() {
 			for _, m := range api.Methods {
 				fmt.Println(m.Id, m.Description)
 			}
-			for _, r := range api.Resources {
+			type pair struct {
+				k string
+				r Resource
+			}
+			l := []pair{}
+			for k, r := range api.Resources {
+				l = append(l, pair{k, r})
+			}
+			for i := 0; i < len(l); i++ {
+				r := l[i].r
 				for _, m := range r.Methods {
-					fmt.Printf("%s - %s\n", m.Id, m.Description)
+					fmt.Printf("%s - %s\n", m.Id[len(apiName)+1:], m.Description)
+				}
+				for k, r := range r.Resources {
+					l = append(l, pair{k, r})
 				}
 			}
-			// TODO: Print methods of nested resources
-
 		} else if args == 4 {
 			method := os.Args[3]
 			m := findMethod(method, *api)
@@ -224,8 +234,8 @@ type Resource struct {
 
 type Method struct {
 	Id, Path, HttpMethod, Description string
-	Parameters           map[string]Parameter
-	Scopes               []string
+	Parameters                        map[string]Parameter
+	Scopes                            []string
 }
 
 func (m Method) call(api *Api) {
