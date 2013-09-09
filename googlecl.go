@@ -49,11 +49,7 @@ func help() {
 		})
 	} else {
 		apiName := os.Args[2]
-		v, err := getPreferredVersion(apiName)
-		if err != nil {
-			log.Fatal(err)
-		}
-		api, err := loadApi(apiName, v)
+		api, err := loadApi(apiName)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -128,20 +124,12 @@ func main() {
 		log.Fatal("Must specify API method to call")
 	}
 
-	apiName := cmd
-	// Look up preferred version in Directory
-	// TODO: Support non-preferred versions
-	v, err := getPreferredVersion(apiName)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	api, err := loadApi(apiName, v)
+	api, err := loadApi(cmd)
 	if err != nil {
 		log.Fatal(err)
 	}
 	if api == nil || (len(api.Resources) == 0 && len(api.Methods) == 0) {
-		log.Fatal("Couldn't load API ", apiName, v)
+		log.Fatal("Couldn't load API ", cmd)
 	}
 
 	m := findMethod(method, *api)
@@ -204,9 +192,24 @@ func getPreferredVersion(apiName string) (string, error) {
 	return d.Items[0].Version, nil
 }
 
-func loadApi(api, version string) (*Api, error) {
+// loadApi takes a string like "apiname" or "apiname:v4" and loads the API from Discovery
+func loadApi(s string) (*Api, error) {
+	parts := strings.SplitN(s, ":", 2)
+	apiName := parts[0]
+	var v string
+	if len(parts) == 2 {
+		v = parts[1]
+	} else {
+		// Look up preferred version in Directory
+		var err error
+		v, err = getPreferredVersion(apiName)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	var a Api
-	err := getAndParse(fmt.Sprintf("https://www.googleapis.com/discovery/v1/apis/%s/%s/rest", api, version), &a)
+	err := getAndParse(fmt.Sprintf("https://www.googleapis.com/discovery/v1/apis/%s/%s/rest", apiName, v), &a)
 	if err != nil {
 		return nil, err
 	}
