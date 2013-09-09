@@ -49,7 +49,7 @@ func help() {
 		})
 	} else {
 		apiName := os.Args[2]
-		api, err := loadApi(apiName)
+		api, err := loadAPI(apiName)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -58,7 +58,7 @@ func help() {
 			fmt.Println("More information:", api.DocumentationLink)
 			fmt.Println("Methods:")
 			for _, m := range api.Methods {
-				fmt.Println(m.Id, m.Description)
+				fmt.Println(m.ID, m.Description)
 			}
 			type pair struct {
 				k string
@@ -71,7 +71,7 @@ func help() {
 			for i := 0; i < len(l); i++ {
 				r := l[i].r
 				for _, m := range r.Methods {
-					fmt.Printf("%s - %s\n", m.Id[len(apiName)+1:], m.Description)
+					fmt.Printf("%s - %s\n", m.ID[len(apiName)+1:], m.Description)
 				}
 				for k, r := range r.Resources {
 					l = append(l, pair{k, r})
@@ -124,7 +124,7 @@ func main() {
 		log.Fatal("Must specify API method to call")
 	}
 
-	api, err := loadApi(cmd)
+	api, err := loadAPI(cmd)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func main() {
 	m.call(api)
 }
 
-func findMethod(method string, api Api) *Method {
+func findMethod(method string, api API) *Method {
 	parts := strings.Split(method, ".")
 	var ms map[string]Method
 	rs := api.Resources
@@ -192,8 +192,8 @@ func getPreferredVersion(apiName string) (string, error) {
 	return d.Items[0].Version, nil
 }
 
-// loadApi takes a string like "apiname" or "apiname:v4" and loads the API from Discovery
-func loadApi(s string) (*Api, error) {
+// loadAPI takes a string like "apiname" or "apiname:v4" and loads the API from Discovery
+func loadAPI(s string) (*API, error) {
 	parts := strings.SplitN(s, ":", 2)
 	apiName := parts[0]
 	var v string
@@ -208,7 +208,7 @@ func loadApi(s string) (*Api, error) {
 		}
 	}
 
-	var a Api
+	var a API
 	err := getAndParse(fmt.Sprintf("https://www.googleapis.com/discovery/v1/apis/%s/%s/rest", apiName, v), &a)
 	if err != nil {
 		return nil, err
@@ -229,8 +229,8 @@ func getAndParse(url string, v interface{}) error {
 	return nil
 }
 
-type Api struct {
-	BaseUrl, Title, Description, DocumentationLink string
+type API struct {
+	BaseURL, Title, Description, DocumentationLink string
 	Resources                                      map[string]Resource
 	Methods                                        map[string]Method
 	Parameters                                     map[string]Parameter
@@ -242,12 +242,12 @@ type Resource struct {
 }
 
 type Method struct {
-	Id, Path, HttpMethod, Description string
+	ID, Path, HttpMethod, Description string
 	Parameters                        map[string]Parameter
 	Scopes                            []string
 }
 
-func (m Method) call(api *Api) {
+func (m Method) call(api *API) {
 	if m.Scopes != nil {
 		scope := strings.Join(m.Scopes, " ")
 		if flagPem != nil && flagIss != nil {
@@ -262,7 +262,7 @@ func (m Method) call(api *Api) {
 		}
 	}
 
-	url := api.BaseUrl + m.Path
+	url := api.BaseURL + m.Path
 	for k, p := range m.Parameters {
 		url = p.process(k, url)
 	}
