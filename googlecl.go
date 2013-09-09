@@ -3,7 +3,7 @@
 // TODO: Cache discovery/directory documents for faster requests.
 // TODO: Handle media upload/download.
 // TODO: Handle repeated parameters.
-// TODO: Support Cloud Endpoints APIs.
+// TODO: Pay down technical debt from having two FlagSets, make that work more better
 
 package main
 
@@ -24,22 +24,23 @@ import (
 )
 
 var (
-	flagset = flag.NewFlagSet("", flag.ExitOnError)
-
-	flagPem    = flagset.String("meta.pem", "", "Location of .pem file")
-	flagSecrets = flagset.String("meta.secrets", "", "Location of client_secrets.json")
-	flagStdin  = flagset.Bool("meta.in", false, "Accept request body from stdin")
-	flagInFile = flagset.String("meta.inFile", "", "File to pass as request body")
+	commonFlags  = flag.NewFlagSet("googlecl", flag.ContinueOnError)
+	flagPem      = commonFlags.String("meta.pem", "", "Location of .pem file")
+	flagSecrets  = commonFlags.String("meta.secrets", "", "Location of client_secrets.json")
+	flagStdin    = commonFlags.Bool("meta.in", false, "Accept request body from stdin")
+	flagInFile   = commonFlags.String("meta.inFile", "", "File to pass as request body")
+	flagEndpoint = commonFlags.String("meta.endpoint", "", "Cloud Endpoints URL, e.g., https://my-app-id.appspot.com/_ah/api/")
 )
 
 func help() {
+	// TODO: "googlecl help --meta.endpoint=foo" fails in here
 	args := len(os.Args)
-	if args < 3 || args > 4 {
+	if args < 3 {
 		fmt.Println("Makes requests to Google APIs")
 		fmt.Println("Usage:")
 		fmt.Println("googlecl <api> <method> --param=foo")
 		fmt.Println("Flags:")
-		flagset.VisitAll(func(f *flag.Flag) {
+		commonFlags.VisitAll(func(f *flag.Flag) {
 			fmt.Printf("  --%s - %s\n", f.Name, f.Usage)
 		})
 	} else {
@@ -72,7 +73,7 @@ func help() {
 					l = append(l, pair{k, r})
 				}
 			}
-		} else if args == 4 {
+		} else {
 			method := os.Args[3]
 			m := findMethod(method, *api)
 			fmt.Println(method, m.Description)
@@ -93,7 +94,7 @@ func list() {
 			Name, Version, Description string
 		}
 	}
-	getAndParse("https://www.googleapis.com/discovery/v1/apis", &directory)
+	getAndParse("discovery/v1/apis", &directory)
 	fmt.Println("Available methods:")
 	for _, i := range directory.Items {
 		fmt.Printf("%s %s - %s\n", i.Name, i.Version, i.Description)
@@ -119,6 +120,7 @@ func main() {
 		log.Fatal("Must specify API method to call")
 	}
 
+	commonFlags.Parse(os.Args[3:])
 	api, err := loadAPI(cmd)
 	if err != nil {
 		log.Fatal(err)
@@ -128,6 +130,7 @@ func main() {
 	}
 
 	m := findMethod(method, *api)
+	flagset := flag.NewFlagSet(method, flag.ContinueOnError)
 	for k, p := range api.Parameters {
 		flagset.String(k, p.Default, p.Description)
 	}
@@ -135,7 +138,7 @@ func main() {
 		flagset.String(k, p.Default, p.Description)
 	}
 	flagset.Parse(os.Args[3:])
-	m.call(api)
+	m.call(api, flagset)
 }
 
 func findMethod(method string, api API) *Method {
@@ -164,7 +167,7 @@ func getPreferredVersion(apiName string) (string, error) {
 			Version string
 		}
 	}
-	err := getAndParse(fmt.Sprintf("https://www.googleapis.com/discovery/v1/apis?preferred=true&name=%s&fields=items/version", apiName), &d)
+	err := getAndParse(fmt.Sprintf("discovery/v1/apis?preferred=true&name=%s&fields=items/version", apiName), &d)
 	if err != nil {
 		return "", err
 	}
@@ -191,14 +194,19 @@ func loadAPI(s string) (*API, error) {
 	}
 
 	var a API
-	err := getAndParse(fmt.Sprintf("https://www.googleapis.com/discovery/v1/apis/%s/%s/rest", apiName, v), &a)
+	err := getAndParse(fmt.Sprintf("discovery/v1/apis/%s/%s/rest", apiName, v), &a)
 	if err != nil {
 		return nil, err
 	}
 	return &a, nil
 }
 
-func getAndParse(url string, v interface{}) error {
+func getAndParse(path string, v interface{}) error {
+	url := "https://www.googleapis.com/" + path
+	if *flagEndpoint != "" {
+		url = *flagEndpoint + path
+	}
+
 	r, err := http.Get(url)
 	if err != nil {
 		return err
@@ -229,10 +237,10 @@ type Method struct {
 	Scopes                            []string
 }
 
-func (m Method) call(api *API) {
+func (m Method) call(api *API, flagset *flag.FlagSet) {
 	if m.Scopes != nil {
 		scope := strings.Join(m.Scopes, " ")
-		if flagPem != nil && flagSecrets != nil {
+		if *flagPem != "" && *flagSecrets != "" {
 			tok, err := accessTokenFromPemFile(scope, *flagPem, *flagSecrets)
 			if err != nil {
 				log.Fatal(err)
@@ -245,10 +253,10 @@ func (m Method) call(api *API) {
 
 	url := api.BaseURL + m.Path
 	for k, p := range m.Parameters {
-		url = p.process(k, url)
+		url = p.process(k, url, flagset)
 	}
 	for k, p := range api.Parameters {
-		url = p.process(k, url)
+		url = p.process(k, url, flagset)
 	}
 
 	var body io.Reader
@@ -308,10 +316,10 @@ func accessTokenFromPemFile(scope, pemPath, secretsPath string) (string, error) 
 	}
 	var config struct {
 		Web struct {
-                        ClientEmail string `json:"client_email"`
-                        TokenURI    string `json:"token_uri"`
-                }
-        }
+			ClientEmail string `json:"client_email"`
+			TokenURI    string `json:"token_uri"`
+		}
+	}
 	err = json.Unmarshal(secretsBytes, &config)
 	if err != nil {
 		return "", err
@@ -331,7 +339,7 @@ type Parameter struct {
 	Required                             bool
 }
 
-func (p Parameter) process(k string, url string) string {
+func (p Parameter) process(k string, url string, flagset *flag.FlagSet) string {
 	f := flagset.Lookup(k)
 	if f == nil {
 		return url

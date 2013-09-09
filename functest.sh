@@ -10,4 +10,5 @@ go build googlecl.go
 ./googlecl urlshortener url.get --shortUrl=http://goo.gl/fUhtIm
 ./googlecl urlshortener:v1 url.get --shortUrl=http://goo.gl/fUhtIm
 ./googlecl urlshortener url.get --shortUrl=http://goo.gl/fUhtIm --fields=longUrl
+./googlecl greeting greets.list --meta.endpoint=https://go-endpoints.appspot.com/_ah/api/
 rm googlecl
