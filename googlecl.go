@@ -29,11 +29,11 @@ var (
 	flagEndpoint = endpointFs.String("endpoint", "https://www.googleapis.com/", "Cloud Endpoints URL, e.g., https://my-app-id.appspot.com/_ah/api/")
 
 	// Flags that get parsed after the command, common to all APIs
-	flagset     = flag.NewFlagSet("googlecl", flag.ExitOnError)
-	flagPem     = flagset.String("meta.pem", "", "Location of .pem file")
-	flagSecrets = flagset.String("meta.secrets", "", "Location of client_secrets.json")
-	flagStdin   = flagset.Bool("meta.in", false, "Accept request body from stdin")
-	flagInFile  = flagset.String("meta.inFile", "", "File to pass as request body")
+	fs          = flag.NewFlagSet("googlecl", flag.ExitOnError)
+	flagPem     = fs.String("meta.pem", "", "Location of .pem file")
+	flagSecrets = fs.String("meta.secrets", "", "Location of client_secrets.json")
+	flagStdin   = fs.Bool("meta.in", false, "Accept request body from stdin")
+	flagInFile  = fs.String("meta.inFile", "", "File to pass as request body")
 )
 
 func simpleHelp() {
@@ -138,12 +138,12 @@ func main() {
 
 	m := findMethod(method, *api)
 	for k, p := range api.Parameters {
-		flagset.String(k, p.Default, p.Description)
+		fs.String(k, p.Default, p.Description)
 	}
 	for k, p := range m.Parameters {
-		flagset.String(k, p.Default, p.Description)
+		fs.String(k, p.Default, p.Description)
 	}
-	flagset.Parse(endpointFs.Args()[2:])
+	fs.Parse(endpointFs.Args()[2:])
 	m.call(api)
 }
 
@@ -343,7 +343,7 @@ type Parameter struct {
 }
 
 func (p Parameter) process(k string, url string) string {
-	f := flagset.Lookup(k)
+	f := fs.Lookup(k)
 	if f == nil {
 		return url
 	}
