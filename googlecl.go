@@ -3,7 +3,6 @@
 // TODO: Cache discovery/directory documents for faster requests.
 // TODO: Handle media upload/download.
 // TODO: Handle repeated parameters.
-// TODO: Pay down technical debt from having two FlagSets, make that work more better
 
 package main
 
@@ -24,66 +23,73 @@ import (
 )
 
 var (
-	commonFlags  = flag.NewFlagSet("googlecl", flag.ContinueOnError)
-	flagPem      = commonFlags.String("meta.pem", "", "Location of .pem file")
-	flagSecrets  = commonFlags.String("meta.secrets", "", "Location of client_secrets.json")
-	flagStdin    = commonFlags.Bool("meta.in", false, "Accept request body from stdin")
-	flagInFile   = commonFlags.String("meta.inFile", "", "File to pass as request body")
-	flagEndpoint = commonFlags.String("meta.endpoint", "", "Cloud Endpoints URL, e.g., https://my-app-id.appspot.com/_ah/api/")
+	// Flags that get parsed before the command, necessary for loading Cloud Endpoints APIs
+	// e.g., "googlecl --endpoint=foo help myapi" parses the endpoint flag before loading the API
+	endpointFs   = flag.NewFlagSet("endpoint", flag.ExitOnError)
+	flagEndpoint = endpointFs.String("endpoint", "https://www.googleapis.com/", "Cloud Endpoints URL, e.g., https://my-app-id.appspot.com/_ah/api/")
+
+	// Flags that get parsed after the command, common to all APIs
+	flagset     = flag.NewFlagSet("googlecl", flag.ExitOnError)
+	flagPem     = flagset.String("meta.pem", "", "Location of .pem file")
+	flagSecrets = flagset.String("meta.secrets", "", "Location of client_secrets.json")
+	flagStdin   = flagset.Bool("meta.in", false, "Accept request body from stdin")
+	flagInFile  = flagset.String("meta.inFile", "", "File to pass as request body")
 )
 
+func simpleHelp() {
+	fmt.Println("Makes requests to Google APIs")
+	fmt.Println("Usage:")
+	fmt.Println("  googlecl <api> <method> --param=foo")
+}
+
 func help() {
-	// TODO: "googlecl help --meta.endpoint=foo" fails in here
-	args := len(os.Args)
-	if args < 3 {
-		fmt.Println("Makes requests to Google APIs")
-		fmt.Println("Usage:")
-		fmt.Println("googlecl <api> <method> --param=foo")
-		fmt.Println("Flags:")
-		commonFlags.VisitAll(func(f *flag.Flag) {
-			fmt.Printf("  --%s - %s\n", f.Name, f.Usage)
-		})
-	} else {
-		apiName := os.Args[2]
-		api, err := loadAPI(apiName)
-		if err != nil {
-			log.Fatal(err)
+	args := endpointFs.Args()
+	nargs := len(args)
+	if nargs == 0 || (nargs == 1 && args[0] == "help") {
+		simpleHelp()
+		return
+	}
+	apiName := args[1]
+	api, err := loadAPI(apiName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if nargs == 2 {
+		// googlecl help <api>
+		fmt.Println(api.Title, api.Description)
+		fmt.Println("More information:", api.DocumentationLink)
+		fmt.Println("Methods:")
+		for _, m := range api.Methods {
+			fmt.Println(m.ID, m.Description)
 		}
-		if args == 3 {
-			fmt.Println(api.Title, api.Description)
-			fmt.Println("More information:", api.DocumentationLink)
-			fmt.Println("Methods:")
-			for _, m := range api.Methods {
-				fmt.Println(m.ID, m.Description)
+		type pair struct {
+			k string
+			r Resource
+		}
+		l := []pair{}
+		for k, r := range api.Resources {
+			l = append(l, pair{k, r})
+		}
+		for i := 0; i < len(l); i++ {
+			r := l[i].r
+			for _, m := range r.Methods {
+				fmt.Printf("%s - %s\n", m.ID[len(api.Name)+1:], m.Description)
 			}
-			type pair struct {
-				k string
-				r Resource
-			}
-			l := []pair{}
-			for k, r := range api.Resources {
+			for k, r := range r.Resources {
 				l = append(l, pair{k, r})
 			}
-			for i := 0; i < len(l); i++ {
-				r := l[i].r
-				for _, m := range r.Methods {
-					fmt.Printf("%s - %s\n", m.ID[len(apiName)+1:], m.Description)
-				}
-				for k, r := range r.Resources {
-					l = append(l, pair{k, r})
-				}
-			}
-		} else {
-			method := os.Args[3]
-			m := findMethod(method, *api)
-			fmt.Println(method, m.Description)
-			fmt.Println("Parameters:")
-			for k, p := range m.Parameters {
-				fmt.Printf("  --%s (%s) - %s\n", k, p.Type, p.Description)
-			}
-			for k, p := range api.Parameters {
-				fmt.Printf("  --%s (%s) - %s\n", k, p.Type, p.Description)
-			}
+		}
+	} else {
+		// googlecl help <api> <method>
+		method := args[2]
+		m := findMethod(method, *api)
+		fmt.Println(method, m.Description)
+		fmt.Println("Parameters:")
+		for k, p := range m.Parameters {
+			fmt.Printf("  --%s (%s) - %s\n", k, p.Type, p.Description)
+		}
+		for k, p := range api.Parameters {
+			fmt.Printf("  --%s (%s) - %s\n", k, p.Type, p.Description)
 		}
 	}
 }
@@ -102,11 +108,13 @@ func list() {
 }
 
 func main() {
-	if len(os.Args) == 1 {
-		help()
+	endpointFs.Parse(os.Args[1:])
+	if len(endpointFs.Args()) == 0 {
+		simpleHelp()
 		return
 	}
-	cmd := os.Args[1]
+
+	cmd := endpointFs.Args()[0]
 	if cmd == "help" {
 		help()
 		return
@@ -115,12 +123,11 @@ func main() {
 		return
 	}
 
-	method := os.Args[2]
+	method := endpointFs.Args()[1]
 	if method == "" {
 		log.Fatal("Must specify API method to call")
 	}
 
-	commonFlags.Parse(os.Args[3:])
 	api, err := loadAPI(cmd)
 	if err != nil {
 		log.Fatal(err)
@@ -130,15 +137,14 @@ func main() {
 	}
 
 	m := findMethod(method, *api)
-	flagset := flag.NewFlagSet(method, flag.ContinueOnError)
 	for k, p := range api.Parameters {
 		flagset.String(k, p.Default, p.Description)
 	}
 	for k, p := range m.Parameters {
 		flagset.String(k, p.Default, p.Description)
 	}
-	flagset.Parse(os.Args[3:])
-	m.call(api, flagset)
+	flagset.Parse(endpointFs.Args()[2:])
+	m.call(api)
 }
 
 func findMethod(method string, api API) *Method {
@@ -202,10 +208,7 @@ func loadAPI(s string) (*API, error) {
 }
 
 func getAndParse(path string, v interface{}) error {
-	url := "https://www.googleapis.com/" + path
-	if *flagEndpoint != "" {
-		url = *flagEndpoint + path
-	}
+	url := *flagEndpoint + path
 
 	r, err := http.Get(url)
 	if err != nil {
@@ -220,10 +223,10 @@ func getAndParse(path string, v interface{}) error {
 }
 
 type API struct {
-	BaseURL, Title, Description, DocumentationLink string
-	Resources                                      map[string]Resource
-	Methods                                        map[string]Method
-	Parameters                                     map[string]Parameter
+	BaseURL, Name, Title, Description, DocumentationLink string
+	Resources                                            map[string]Resource
+	Methods                                              map[string]Method
+	Parameters                                           map[string]Parameter
 }
 
 type Resource struct {
@@ -237,7 +240,7 @@ type Method struct {
 	Scopes                            []string
 }
 
-func (m Method) call(api *API, flagset *flag.FlagSet) {
+func (m Method) call(api *API) {
 	if m.Scopes != nil {
 		scope := strings.Join(m.Scopes, " ")
 		if *flagPem != "" && *flagSecrets != "" {
@@ -253,10 +256,10 @@ func (m Method) call(api *API, flagset *flag.FlagSet) {
 
 	url := api.BaseURL + m.Path
 	for k, p := range m.Parameters {
-		url = p.process(k, url, flagset)
+		url = p.process(k, url)
 	}
 	for k, p := range api.Parameters {
-		url = p.process(k, url, flagset)
+		url = p.process(k, url)
 	}
 
 	var body io.Reader
@@ -339,7 +342,7 @@ type Parameter struct {
 	Required                             bool
 }
 
-func (p Parameter) process(k string, url string, flagset *flag.FlagSet) string {
+func (p Parameter) process(k string, url string) string {
 	f := flagset.Lookup(k)
 	if f == nil {
 		return url
