@@ -241,10 +241,11 @@ func (m Method) call(api *API) {
 		m.Parameters[k] = p
 	}
 	for k, p := range m.Parameters {
-		v := flagValue(k)
-		if v == "" {
+		f := fs.Lookup(k)
+		if f == nil || f.Value.String() == "" {
 			continue
 		}
+		v := f.Value.String()
 		if p.Location == "path" {
 			if p.Required && v == "" {
 				log.Fatal("Missing required parameter", k)
@@ -342,12 +343,4 @@ func accessTokenFromPemFile(scope, pemPath, secretsPath string) string {
 type Parameter struct {
 	Type, Description, Location, Default string
 	Required                             bool
-}
-
-func flagValue(k string) string {
-	f := fs.Lookup(k)
-	if f == nil {
-		return ""
-	}
-	return f.Value.String()
 }
