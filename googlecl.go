@@ -7,6 +7,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -30,7 +31,6 @@ var (
 	fs          = flag.NewFlagSet("googlecl", flag.ExitOnError)
 	flagPem     = fs.String("meta.pem", "", "Location of .pem file")
 	flagSecrets = fs.String("meta.secrets", "", "Location of client_secrets.json")
-	flagStdin   = fs.Bool("meta.in", false, "Accept request body from stdin")
 	flagInFile  = fs.String("meta.inFile", "", "File to pass as request body")
 )
 
@@ -121,11 +121,6 @@ func main() {
 		return
 	}
 
-	method := endpointFs.Args()[1]
-	if method == "" {
-		log.Fatal("Must specify API method to call")
-	}
-
 	api, err := loadAPI(cmd)
 	if err != nil {
 		log.Fatal(err)
@@ -134,6 +129,7 @@ func main() {
 		log.Fatal("Couldn't load API ", cmd)
 	}
 
+	method := endpointFs.Args()[1]
 	m := findMethod(method, *api)
 	for k, p := range api.Parameters {
 		fs.String(k, p.Default, p.Description)
@@ -240,30 +236,46 @@ type Method struct {
 
 func (m Method) call(api *API) {
 	url := api.BaseURL + m.Path
-	for k, p := range m.Parameters {
-		p.process(k, &url)
-	}
-	// API-level common parameters
-	for k, p := range api.Parameters {
-		p.process(k, &url)
-	}
 
-	r, err := http.NewRequest(m.HttpMethod, url, nil)
-	if err != nil {
-		log.Fatal("error creating request:", err)
+	for k, p := range api.Parameters {
+		m.Parameters[k] = p
+	}
+	for k, p := range m.Parameters {
+		v := flagValue(k)
+		if v == "" {
+			continue
+		}
+		if p.Location == "path" {
+			if p.Required && v == "" {
+				log.Fatal("Missing required parameter", k)
+			}
+			t := fmt.Sprintf("{%s}", k)
+			strings.Replace(url, t, v, -1)
+		} else if p.Location == "query" {
+			delim := "&"
+			if !strings.Contains(url, "?") {
+				delim = "?"
+			}
+			url += fmt.Sprintf("%s%s=%s", delim, k, v)
+		}
 	}
 
 	// Add request body
-	if *flagStdin {
-		// If user passes the --in flag, use stdin as the request body
-		r.Body = os.Stdin
-	} else if *flagInFile != "" {
+	var body io.Reader
+	if *flagInFile != "" {
 		// If user passes --inFile flag, open that file and use its content as request body
-		body, err := os.Open(*flagInFile)
+
+		// TODO: Don't buffer the whole file.
+		b, err := ioutil.ReadFile(*flagInFile)
 		if err != nil {
-			log.Fatal(err)
+			log.Fatal("error reading file:", err)
 		}
-		r.Body = body
+		body = bytes.NewReader(b)
+	}
+
+	r, err := http.NewRequest(m.HttpMethod, url, body)
+	if err != nil {
+		log.Fatal("error creating request:", err)
 	}
 
 	// Add auth header
@@ -332,27 +344,10 @@ type Parameter struct {
 	Required                             bool
 }
 
-func (p Parameter) process(k string, url *string) {
+func flagValue(k string) string {
 	f := fs.Lookup(k)
 	if f == nil {
-		return
+		return ""
 	}
-	v := f.Value.String()
-	if v == "" {
-		return
-	}
-	if p.Location == "path" {
-		if p.Required && v == "" {
-			log.Print("Missing required parameter ", k)
-		}
-		t := fmt.Sprintf("{%s}", k)
-		strings.Replace(*url, t, v, -1)
-	} else if p.Location == "query" {
-		delim := "&"
-		if !strings.Contains(*url, "?") {
-			delim = "?"
-		}
-		u := *url + fmt.Sprintf("%s%s=%s", delim, k, v)
-		url = &u
-	}
+	return f.Value.String()
 }
