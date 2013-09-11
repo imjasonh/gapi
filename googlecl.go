@@ -89,6 +89,12 @@ func help() {
 		for k, p := range api.Parameters {
 			fmt.Printf("  --%s (%s) - %s\n", k, p.Type, p.Description)
 		}
+
+		s := api.Schemas[m.RequestSchema.Ref]
+		// TODO: Support deep nested schemas, and use actual flags to get these strings to avoid duplication
+		for k, p := range s.Properties {
+			fmt.Printf("  --res.%s (%s) - %s\n", k, p.Type, p.Description)
+		}
 	}
 }
 
@@ -137,6 +143,13 @@ func main() {
 	for k, p := range m.Parameters {
 		fs.String(k, p.Default, p.Description)
 	}
+
+	// TODO: Support deep nested schemas
+	s := api.Schemas[m.RequestSchema.Ref]
+	for pk, p := range s.Properties {
+		fs.String("res."+pk, "", p.Description)
+	}
+
 	fs.Parse(endpointFs.Args()[2:])
 	m.call(api)
 }
@@ -221,6 +234,7 @@ type API struct {
 	Resources                                            map[string]Resource
 	Methods                                              map[string]Method
 	Parameters                                           map[string]Parameter
+	Schemas                                              map[string]Schema
 }
 
 type Resource struct {
@@ -232,6 +246,9 @@ type Method struct {
 	ID, Path, HttpMethod, Description string
 	Parameters                        map[string]Parameter
 	Scopes                            []string
+	RequestSchema                     struct {
+		Ref string `json:"$ref"`
+	} `json:"request"`
 }
 
 func (m Method) call(api *API) {
@@ -289,6 +306,27 @@ func (m Method) call(api *API) {
 		r.ContentLength = int64(len(b))
 		r.Header.Set("Content-Type", "application/json")
 		r.Body = ioutil.NopCloser(bytes.NewReader(b))
+	} else {
+		// If user passed --res.* flags, create some JSON and use that as the request body
+		s := api.Schemas[m.RequestSchema.Ref]
+		request := make(map[string]interface{})
+		for k, _ := range s.Properties {
+			f := fs.Lookup("res." + k)
+			if f == nil || f.Value.String() == "" {
+				continue
+			}
+			v := f.Value.String()
+			request[k] = v
+		}
+		if len(request) != 0 {
+			body, err := json.Marshal(&request)
+			if err != nil {
+				log.Fatal("error marshalling JSON", err)
+			}
+			r.ContentLength = int64(len(body))
+			r.Header.Set("Content-Type", "application/json")
+			r.Body = ioutil.NopCloser(bytes.NewReader(body))
+		}
 	}
 
 	// Add auth header
@@ -355,4 +393,17 @@ func accessTokenFromPemFile(scope, pemPath, secretsPath string) string {
 type Parameter struct {
 	Type, Description, Location, Default string
 	Required                             bool
+}
+
+type Schema struct {
+	Type       string
+	Properties map[string]Property
+}
+
+type Property struct {
+	Ref               string `json:"$ref"`
+	Type, Description string
+	Items             struct {
+		Ref string `json:"$ref"`
+	}
 }
