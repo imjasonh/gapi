@@ -2,12 +2,10 @@
 // TODO: Cache discovery/directory documents for faster requests.
 // TODO: Handle media upload/download.
 // TODO: Handle repeated parameters.
-// TODO: Request bodies seem not to be getting set...
 
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -237,10 +235,10 @@ type Method struct {
 func (m Method) call(api *API) {
 	url := api.BaseURL + m.Path
 
-	for k, p := range api.Parameters {
-		m.Parameters[k] = p
-	}
 	for k, p := range m.Parameters {
+		api.Parameters[k] = p
+	}
+	for k, p := range api.Parameters {
 		f := fs.Lookup(k)
 		if f == nil || f.Value.String() == "" {
 			continue
@@ -261,22 +259,25 @@ func (m Method) call(api *API) {
 		}
 	}
 
-	// Add request body
-	var body io.Reader
-	if *flagInFile != "" {
-		// If user passes --inFile flag, open that file and use its content as request body
-
-		// TODO: Don't buffer the whole file.
-		b, err := ioutil.ReadFile(*flagInFile)
-		if err != nil {
-			log.Fatal("error reading file:", err)
-		}
-		body = bytes.NewReader(b)
-	}
-
-	r, err := http.NewRequest(m.HttpMethod, url, body)
+	r, err := http.NewRequest(m.HttpMethod, url, nil)
 	if err != nil {
 		log.Fatal("error creating request:", err)
+	}
+
+	// Add request body
+	if *flagInFile != "" {
+		// If user passes --inFile flag, open that file and use its content as request body
+		f, err := os.Open(*flagInFile)
+		if err != nil {
+			log.Fatal("error opening file:", err)
+		}
+		fi, err := f.Stat()
+		if err != nil {
+			log.Fatal("error stating file:", err)
+		}
+		r.ContentLength = fi.Size()
+		r.Header.Set("Content-Type", "application/json")
+		r.Body = f
 	}
 
 	// Add auth header

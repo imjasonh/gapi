@@ -54,6 +54,16 @@ $ go run googlecl.go urlshortener url.get --shortUrl=http://goo.gl/fUhtIm --fiel
 }
 ```
 
+Insert a new resource
+```
+$ go run googlecl.go urlshortener url.insert --meta.pem=example.pem --meta.secrets=client_secrets.json --meta.inFile=url.json
+{
+ "kind": "urlshortener#url",
+ "id": "http://goo.gl/POIxRL",
+ "longUrl": "https://github.com/ImJasonH/googlecl"
+}
+```
+
 Cloud Endpoints APIs
 --------------------
 
