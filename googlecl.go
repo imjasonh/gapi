@@ -1,15 +1,13 @@
 // TODO: Handle user auth.
-// TODO: Verify service account auth actually works.
 // TODO: Cache discovery/directory documents for faster requests.
 // TODO: Handle media upload/download.
 // TODO: Handle repeated parameters.
+// TODO: Request bodies seem not to be getting set...
 
 package main
 
 import (
 	"encoding/json"
-	"encoding/pem"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -241,43 +239,41 @@ type Method struct {
 }
 
 func (m Method) call(api *API) {
-	if m.Scopes != nil {
-		scope := strings.Join(m.Scopes, " ")
-		if *flagPem != "" && *flagSecrets != "" {
-			tok, err := accessTokenFromPemFile(scope, *flagPem, *flagSecrets)
-			if err != nil {
-				log.Fatal(err)
-			}
-			log.Print(tok)
-		} else {
-			log.Fatal("This method requires access to API scopes: ", scope)
-		}
-	}
-
 	url := api.BaseURL + m.Path
 	for k, p := range m.Parameters {
 		url = p.process(k, url)
 	}
+	// API-level common parameters
 	for k, p := range api.Parameters {
 		url = p.process(k, url)
 	}
 
-	var body io.Reader
+	r, err := http.NewRequest(m.HttpMethod, url, nil)
+	if err != nil {
+		log.Fatal("error creating request:", err)
+	}
+
 	if *flagStdin {
 		// If user passes the --in flag, use stdin as the request body
-		body = os.Stdin
+		r.Body = os.Stdin
 	} else if *flagInFile != "" {
 		// If user passes --inFile flag, open that file and use its content as request body
-		var err error
-		body, err = os.Open(*flagInFile)
+		body, err := os.Open(*flagInFile)
 		if err != nil {
 			log.Fatal(err)
 		}
+		r.Body = body
 	}
 
-	r, err := http.NewRequest(m.HttpMethod, url, body)
-	if err != nil {
-		log.Fatal(err)
+	// Add auth header
+	if m.Scopes != nil {
+		if *flagPem != "" && *flagSecrets != "" {
+			scope := strings.Join(m.Scopes, " ")
+			tok := accessTokenFromPemFile(scope, *flagPem, *flagSecrets)
+			r.Header.Set("Authorization", "Bearer "+tok)
+		} else {
+			log.Fatal("This method requires access to API scopes: ", m.Scopes)
+		}
 	}
 
 	client := &http.Client{}
@@ -293,29 +289,10 @@ func (m Method) call(api *API) {
 	}
 }
 
-func accessTokenFromPemFile(scope, pemPath, secretsPath string) (string, error) {
-	pemFile, err := os.Open(pemPath)
+func accessTokenFromPemFile(scope, pemPath, secretsPath string) string {
+	secretBytes, err := ioutil.ReadFile(secretsPath)
 	if err != nil {
-		return "", err
-	}
-	defer pemFile.Close()
-	keyBytes, err := ioutil.ReadAll(pemFile)
-	if err != nil {
-		return "", err
-	}
-	pb, _ := pem.Decode(keyBytes)
-	if len(pb.Bytes) == 0 {
-		return "", errors.New("No PEM data found")
-	}
-
-	secretsFile, err := os.Open(secretsPath)
-	if err != nil {
-		return "", err
-	}
-	defer secretsFile.Close()
-	secretsBytes, err := ioutil.ReadAll(secretsFile)
-	if err != nil {
-		return "", err
+		log.Fatal("error reading secrets file:", err)
 	}
 	var config struct {
 		Web struct {
@@ -323,18 +300,30 @@ func accessTokenFromPemFile(scope, pemPath, secretsPath string) (string, error) 
 			TokenURI    string `json:"token_uri"`
 		}
 	}
-	err = json.Unmarshal(secretsBytes, &config)
+	err = json.Unmarshal(secretBytes, &config)
 	if err != nil {
-		return "", err
+		log.Fatal("error unmarshalling secrets:", err)
 	}
 
-	t := jwt.NewToken(config.Web.ClientEmail, scope, pb.Bytes)
-	t.ClaimSet.Aud = config.Web.TokenURI
-	tok, err := t.Assert(&http.Client{})
+	keyBytes, err := ioutil.ReadFile(pemPath)
 	if err != nil {
-		return "", err
+		log.Fatal("error reading private key file:", err)
 	}
-	return tok.AccessToken, nil
+
+	// Craft the ClaimSet and JWT token.
+	t := jwt.NewToken(config.Web.ClientEmail, scope, keyBytes)
+	t.ClaimSet.Aud = config.Web.TokenURI
+
+	// We need to provide a client.
+	c := &http.Client{}
+
+	// Get the access token.
+	o, err := t.Assert(c)
+	if err != nil {
+		log.Fatal("assertion error:", err)
+	}
+
+	return o.AccessToken
 }
 
 type Parameter struct {
