@@ -241,11 +241,11 @@ type Method struct {
 func (m Method) call(api *API) {
 	url := api.BaseURL + m.Path
 	for k, p := range m.Parameters {
-		url = p.process(k, url)
+		p.process(k, &url)
 	}
 	// API-level common parameters
 	for k, p := range api.Parameters {
-		url = p.process(k, url)
+		p.process(k, &url)
 	}
 
 	r, err := http.NewRequest(m.HttpMethod, url, nil)
@@ -253,6 +253,7 @@ func (m Method) call(api *API) {
 		log.Fatal("error creating request:", err)
 	}
 
+	// Add request body
 	if *flagStdin {
 		// If user passes the --in flag, use stdin as the request body
 		r.Body = os.Stdin
@@ -331,27 +332,27 @@ type Parameter struct {
 	Required                             bool
 }
 
-func (p Parameter) process(k string, url string) string {
+func (p Parameter) process(k string, url *string) {
 	f := fs.Lookup(k)
 	if f == nil {
-		return url
+		return
 	}
 	v := f.Value.String()
 	if v == "" {
-		return url
+		return
 	}
 	if p.Location == "path" {
 		if p.Required && v == "" {
 			log.Print("Missing required parameter ", k)
 		}
 		t := fmt.Sprintf("{%s}", k)
-		return strings.Replace(url, t, v, -1)
+		strings.Replace(*url, t, v, -1)
 	} else if p.Location == "query" {
 		delim := "&"
-		if !strings.Contains(url, "?") {
+		if !strings.Contains(*url, "?") {
 			delim = "?"
 		}
-		return url + fmt.Sprintf("%s%s=%s", delim, k, v)
+		u := *url + fmt.Sprintf("%s%s=%s", delim, k, v)
+		url = &u
 	}
-	return url
 }
