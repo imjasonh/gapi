@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -30,6 +31,7 @@ var (
 	flagPem     = fs.String("meta.pem", "", "Location of .pem file")
 	flagSecrets = fs.String("meta.secrets", "", "Location of client_secrets.json")
 	flagInFile  = fs.String("meta.inFile", "", "File to pass as request body")
+	flagStdin   = fs.Bool("meta.in", false, "Whether to use stdin as the request body")
 )
 
 func simpleHelp() {
@@ -266,7 +268,7 @@ func (m Method) call(api *API) {
 
 	// Add request body
 	if *flagInFile != "" {
-		// If user passes --inFile flag, open that file and use its content as request body
+		// If user passes --meta.inFile flag, open that file and use its content as request body
 		f, err := os.Open(*flagInFile)
 		if err != nil {
 			log.Fatal("error opening file:", err)
@@ -278,6 +280,15 @@ func (m Method) call(api *API) {
 		r.ContentLength = fi.Size()
 		r.Header.Set("Content-Type", "application/json")
 		r.Body = f
+	} else if *flagStdin {
+		// If user passes --meta.in flag, buffer stdin it and pass it along as the request body
+		b, err := ioutil.ReadAll(os.Stdin)
+		if err != nil {
+			log.Fatal("error reading from stdin:", err)
+		}
+		r.ContentLength = int64(len(b))
+		r.Header.Set("Content-Type", "application/json")
+		r.Body = ioutil.NopCloser(bytes.NewReader(b))
 	}
 
 	// Add auth header

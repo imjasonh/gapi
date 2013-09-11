@@ -63,6 +63,11 @@ $ go run googlecl.go urlshortener url.insert --meta.pem=example.pem --meta.secre
  "longUrl": "https://github.com/ImJasonH/googlecl"
 }
 ```
+or
+```
+$ echo '{"longUrl":"https://github.com/ImJasonH/googlecl"}' | go run googlecl.go urlshortener url.insert --meta.pem=example.pem --meta.secrets=client_secrets.json --meta.in
+```
+(Make sure to pass the --meta.in flag to tell googlecl to read from stdin)
 
 Cloud Endpoints APIs
 --------------------
