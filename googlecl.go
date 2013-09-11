@@ -352,16 +352,17 @@ func (p Parameter) process(k string, url string) string {
 		return url
 	}
 	if p.Location == "path" {
-		t := fmt.Sprintf("{%s}", k)
 		if p.Required && v == "" {
 			log.Print("Missing required parameter ", k)
 		}
+		t := fmt.Sprintf("{%s}", k)
 		return strings.Replace(url, t, v, -1)
 	} else if p.Location == "query" {
+		delim := "&"
 		if !strings.Contains(url, "?") {
-			url += "?"
+			delim = "?"
 		}
-		return url + fmt.Sprintf("&%s=%s", k, v)
+		return url + fmt.Sprintf("%s%s=%s", delim, k, v)
 	}
 	return url
 }
