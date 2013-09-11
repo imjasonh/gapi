@@ -69,6 +69,12 @@ $ echo '{"longUrl":"https://github.com/ImJasonH/googlecl"}' | go run googlecl.go
 ```
 (Make sure to pass the --meta.in flag to tell googlecl to read from stdin)
 
+or, for simple request bodies
+```
+$ go run googlecl.go urlshortener url.insert --meta.pem=example.pem --meta.secrets=client_secrets.json --res.longUrl=https://github.com/ImJasonH/googlecl
+```
+(This syntax is currently only supported for top-level request fields)
+
 Cloud Endpoints APIs
 --------------------
 
