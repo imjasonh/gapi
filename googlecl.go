@@ -15,13 +15,12 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"code.google.com/p/goauth2/oauth"
 	"code.google.com/p/goauth2/oauth/jwt"
 )
-
-const ()
 
 var (
 	// Flags that get parsed before the command, necessary for loading Cloud Endpoints APIs
@@ -310,8 +309,7 @@ func (m Method) call(api *API) {
 				continue
 			}
 			v := f.Value.String()
-			// TODO: Need to convert to expected type first
-			request[k] = v
+			request[k] = toType(s.Type, v)
 		}
 		if len(request) != 0 {
 			body, err := json.Marshal(&request)
@@ -347,6 +345,25 @@ func (m Method) call(api *API) {
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		os.Exit(1)
 	}
+}
+
+func toType(t, v string) interface{} {
+	if t == "string" {
+		return v
+	} else if t == "boolean" {
+		return v == "true"
+	} else if t == "integer" {
+		i, err := strconv.ParseInt(v, 10, 64)
+		maybeFatal("error converting "+v+": ", err)
+		return int64(i)
+	} else if t == "number" {
+		f, err := strconv.ParseFloat(v, 64)
+		maybeFatal("error convert "+v+": ", err)
+		return float64(f)
+	} else {
+		log.Fatal(fmt.Sprintf("unable to convert %s to type %s", v, t))
+	}
+	return "unreachable"
 }
 
 func accessTokenFromPemFile(scope string) string {
