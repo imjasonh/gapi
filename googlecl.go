@@ -147,6 +147,11 @@ func main() {
 		log.Fatal("Couldn't load API ", cmd)
 	}
 
+	if len(endpointFs.Args()) == 1 {
+		fmt.Println("Must specify a method to call")
+		fmt.Printf("Run \"googlecl help %s\" to see a list of available methods\n", cmd)
+		return
+	}
 	method := endpointFs.Args()[1]
 	m := findMethod(method, *api)
 	for k, p := range api.Parameters {
