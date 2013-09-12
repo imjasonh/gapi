@@ -34,6 +34,12 @@ var (
 	flagStdin   = fs.Bool("meta.in", false, "Whether to use stdin as the request body")
 )
 
+func maybeFatal(msg string, err error) {
+	if err != nil {
+		log.Fatal(msg, err)
+	}
+}
+
 func simpleHelp() {
 	fmt.Println("Makes requests to Google APIs")
 	fmt.Println("Usage:")
@@ -48,10 +54,7 @@ func help() {
 		return
 	}
 	apiName := args[1]
-	api, err := loadAPI(apiName)
-	if err != nil {
-		log.Fatal(err)
-	}
+	api := loadAPI(apiName)
 	if nargs == 2 {
 		// googlecl help <api>
 		fmt.Println(api.Title, api.Description)
@@ -89,7 +92,6 @@ func help() {
 		for k, p := range api.Parameters {
 			fmt.Printf("  --%s (%s) - %s\n", k, p.Type, p.Description)
 		}
-
 		s := api.Schemas[m.RequestSchema.Ref]
 		// TODO: Support deep nested schemas, and use actual flags to get these strings to avoid duplication
 		for k, p := range s.Properties {
@@ -127,10 +129,7 @@ func main() {
 		return
 	}
 
-	api, err := loadAPI(cmd)
-	if err != nil {
-		log.Fatal(err)
-	}
+	api := loadAPI(cmd)
 	if api == nil || (len(api.Resources) == 0 && len(api.Methods) == 0) {
 		log.Fatal("Couldn't load API ", cmd)
 	}
@@ -147,7 +146,7 @@ func main() {
 	// TODO: Support deep nested schemas
 	s := api.Schemas[m.RequestSchema.Ref]
 	for pk, p := range s.Properties {
-		fs.String("res."+pk, "", p.Description)
+		fs.String("res."+pk, "", "Request body: "+p.Description)
 	}
 
 	fs.Parse(endpointFs.Args()[2:])
@@ -174,24 +173,21 @@ func findMethod(method string, api API) *Method {
 	return &m
 }
 
-func getPreferredVersion(apiName string) (string, error) {
+func getPreferredVersion(apiName string) string {
 	var d struct {
 		Items []struct {
 			Version string
 		}
 	}
-	err := getAndParse(fmt.Sprintf("discovery/v1/apis?preferred=true&name=%s&fields=items/version", apiName), &d)
-	if err != nil {
-		return "", err
-	}
+	getAndParse(fmt.Sprintf("discovery/v1/apis?preferred=true&name=%s&fields=items/version", apiName), &d)
 	if d.Items == nil {
 		log.Fatal("Could not load API ", apiName)
 	}
-	return d.Items[0].Version, nil
+	return d.Items[0].Version
 }
 
 // loadAPI takes a string like "apiname" or "apiname:v4" and loads the API from Discovery
-func loadAPI(s string) (*API, error) {
+func loadAPI(s string) *API {
 	parts := strings.SplitN(s, ":", 2)
 	apiName := parts[0]
 	var v string
@@ -199,34 +195,22 @@ func loadAPI(s string) (*API, error) {
 		v = parts[1]
 	} else {
 		// Look up preferred version in Directory
-		var err error
-		v, err = getPreferredVersion(apiName)
-		if err != nil {
-			log.Fatal(err)
-		}
+		v = getPreferredVersion(apiName)
 	}
 
 	var a API
-	err := getAndParse(fmt.Sprintf("discovery/v1/apis/%s/%s/rest", apiName, v), &a)
-	if err != nil {
-		return nil, err
-	}
-	return &a, nil
+	getAndParse(fmt.Sprintf("discovery/v1/apis/%s/%s/rest", apiName, v), &a)
+	return &a
 }
 
-func getAndParse(path string, v interface{}) error {
+func getAndParse(path string, v interface{}) {
 	url := *flagEndpoint + path
 
 	r, err := http.Get(url)
-	if err != nil {
-		return err
-	}
+	maybeFatal("error getting "+url, err)
 	defer r.Body.Close()
 	err = json.NewDecoder(r.Body).Decode(v)
-	if err != nil {
-		return err
-	}
-	return nil
+	maybeFatal("error decoding JSON", err)
 }
 
 type API struct {
@@ -279,30 +263,22 @@ func (m Method) call(api *API) {
 	}
 
 	r, err := http.NewRequest(m.HttpMethod, url, nil)
-	if err != nil {
-		log.Fatal("error creating request:", err)
-	}
+	maybeFatal("error creating request:", err)
 
 	// Add request body
 	if *flagInFile != "" {
 		// If user passes --meta.inFile flag, open that file and use its content as request body
 		f, err := os.Open(*flagInFile)
-		if err != nil {
-			log.Fatal("error opening file:", err)
-		}
+		maybeFatal("error opening file:", err)
 		fi, err := f.Stat()
-		if err != nil {
-			log.Fatal("error stating file:", err)
-		}
+		maybeFatal("error stating file:", err)
 		r.ContentLength = fi.Size()
 		r.Header.Set("Content-Type", "application/json")
 		r.Body = f
 	} else if *flagStdin {
 		// If user passes --meta.in flag, buffer stdin it and pass it along as the request body
 		b, err := ioutil.ReadAll(os.Stdin)
-		if err != nil {
-			log.Fatal("error reading from stdin:", err)
-		}
+		maybeFatal("error reading from stdin:", err)
 		r.ContentLength = int64(len(b))
 		r.Header.Set("Content-Type", "application/json")
 		r.Body = ioutil.NopCloser(bytes.NewReader(b))
@@ -316,13 +292,12 @@ func (m Method) call(api *API) {
 				continue
 			}
 			v := f.Value.String()
+			// TODO: Need to convert to expected type first
 			request[k] = v
 		}
 		if len(request) != 0 {
 			body, err := json.Marshal(&request)
-			if err != nil {
-				log.Fatal("error marshalling JSON", err)
-			}
+			maybeFatal("error marshalling JSON:", err)
 			r.ContentLength = int64(len(body))
 			r.Header.Set("Content-Type", "application/json")
 			r.Body = ioutil.NopCloser(bytes.NewReader(body))
@@ -342,9 +317,7 @@ func (m Method) call(api *API) {
 
 	client := &http.Client{}
 	resp, err := client.Do(r)
-	if err != nil {
-		log.Fatal(err)
-	}
+	maybeFatal("error making request:", err)
 	defer resp.Body.Close()
 
 	io.Copy(os.Stderr, resp.Body)
@@ -355,9 +328,7 @@ func (m Method) call(api *API) {
 
 func accessTokenFromPemFile(scope, pemPath, secretsPath string) string {
 	secretBytes, err := ioutil.ReadFile(secretsPath)
-	if err != nil {
-		log.Fatal("error reading secrets file:", err)
-	}
+	maybeFatal("error reading secrets file:", err)
 	var config struct {
 		Web struct {
 			ClientEmail string `json:"client_email"`
@@ -365,14 +336,10 @@ func accessTokenFromPemFile(scope, pemPath, secretsPath string) string {
 		}
 	}
 	err = json.Unmarshal(secretBytes, &config)
-	if err != nil {
-		log.Fatal("error unmarshalling secrets:", err)
-	}
+	maybeFatal("error unmarshalling secrets:", err)
 
 	keyBytes, err := ioutil.ReadFile(pemPath)
-	if err != nil {
-		log.Fatal("error reading private key file:", err)
-	}
+	maybeFatal("error reading private key file:", err)
 
 	// Craft the ClaimSet and JWT token.
 	t := jwt.NewToken(config.Web.ClientEmail, scope, keyBytes)
@@ -383,9 +350,7 @@ func accessTokenFromPemFile(scope, pemPath, secretsPath string) string {
 
 	// Get the access token.
 	o, err := t.Assert(c)
-	if err != nil {
-		log.Fatal("assertion error:", err)
-	}
+	maybeFatal("assertion error:", err)
 
 	return o.AccessToken
 }
