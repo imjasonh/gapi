@@ -308,7 +308,7 @@ func (m Method) call(api *API) {
 	if m.Scopes != nil {
 		if *flagPem != "" && *flagSecrets != "" {
 			scope := strings.Join(m.Scopes, " ")
-			tok := accessTokenFromPemFile(scope, *flagPem, *flagSecrets)
+			tok := accessTokenFromPemFile(scope)
 			r.Header.Set("Authorization", "Bearer "+tok)
 		} else {
 			log.Fatal("This method requires access to API scopes: ", m.Scopes)
@@ -326,8 +326,8 @@ func (m Method) call(api *API) {
 	}
 }
 
-func accessTokenFromPemFile(scope, pemPath, secretsPath string) string {
-	secretBytes, err := ioutil.ReadFile(secretsPath)
+func accessTokenFromPemFile(scope string) string {
+	secretBytes, err := ioutil.ReadFile(*flagSecrets)
 	maybeFatal("error reading secrets file:", err)
 	var config struct {
 		Web struct {
@@ -338,7 +338,7 @@ func accessTokenFromPemFile(scope, pemPath, secretsPath string) string {
 	err = json.Unmarshal(secretBytes, &config)
 	maybeFatal("error unmarshalling secrets:", err)
 
-	keyBytes, err := ioutil.ReadFile(pemPath)
+	keyBytes, err := ioutil.ReadFile(*flagPem)
 	maybeFatal("error reading private key file:", err)
 
 	// Craft the ClaimSet and JWT token.
