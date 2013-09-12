@@ -17,8 +17,11 @@ import (
 	"os"
 	"strings"
 
+	"code.google.com/p/goauth2/oauth"
 	"code.google.com/p/goauth2/oauth/jwt"
 )
+
+const ()
 
 var (
 	// Flags that get parsed before the command, necessary for loading Cloud Endpoints APIs
@@ -32,11 +35,20 @@ var (
 	flagSecrets = fs.String("meta.secrets", "", "Location of client_secrets.json")
 	flagInFile  = fs.String("meta.inFile", "", "File to pass as request body")
 	flagStdin   = fs.Bool("meta.in", false, "Whether to use stdin as the request body")
+	oauthConfig = &oauth.Config{
+		ClientId:     "68444827642.apps.googleusercontent.com",
+		ClientSecret: "K62E0K7ldOYkwUos3GrNkzU4",
+		RedirectURL:  "urn:ietf:wg:oauth:2.0:oob",
+		Scope:        "",
+		AuthURL:      "https://accounts.google.com/o/oauth2/auth",
+		TokenURL:     "https://accounts.google.com/o/oauth2/token",
+		TokenCache:   oauth.CacheFile("tokencache"),
+	}
 )
 
 func maybeFatal(msg string, err error) {
 	if err != nil {
-		log.Fatal(msg, err)
+		log.Fatal(msg, " ", err)
 	}
 }
 
@@ -121,11 +133,12 @@ func main() {
 	}
 
 	cmd := endpointFs.Args()[0]
-	if cmd == "help" {
-		help()
-		return
-	} else if cmd == "list" {
-		list()
+	cmds := map[string]func(){
+		"help": help,
+		"list": list,
+	}
+	if f, found := cmds[cmd]; found {
+		f()
 		return
 	}
 
@@ -306,12 +319,17 @@ func (m Method) call(api *API) {
 
 	// Add auth header
 	if m.Scopes != nil {
+		scope := strings.Join(m.Scopes, " ")
 		if *flagPem != "" && *flagSecrets != "" {
-			scope := strings.Join(m.Scopes, " ")
 			tok := accessTokenFromPemFile(scope)
 			r.Header.Set("Authorization", "Bearer "+tok)
 		} else {
-			log.Fatal("This method requires access to API scopes: ", m.Scopes)
+			fmt.Println("This method requires access to protected resources")
+			fmt.Println("Visit this URL to get a token:")
+			oauthConfig.Scope = scope
+			fmt.Println(oauthConfig.AuthCodeURL(""))
+			// TODO: Handle passing the --code flag, and/or start a server and accept a ping back to localhost
+			return
 		}
 	}
 
