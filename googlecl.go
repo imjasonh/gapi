@@ -283,49 +283,20 @@ func (m Method) call(api *API) {
 	maybeFatal("error creating request:", err)
 
 	// Add request body
+	r.Header.Set("Content-Type", "application/json")
 	if *flagInFile != "" {
-		// If user passes --meta.inFile flag, open that file and use its content as request body
-		f, err := os.Open(*flagInFile)
-		maybeFatal("error opening file:", err)
-		fi, err := f.Stat()
-		maybeFatal("error stating file:", err)
-		r.ContentLength = fi.Size()
-		r.Header.Set("Content-Type", "application/json")
-		r.Body = f
+		r.Body, r.ContentLength = bodyFromFile()
 	} else if *flagStdin {
-		// If user passes --meta.in flag, buffer stdin it and pass it along as the request body
-		b, err := ioutil.ReadAll(os.Stdin)
-		maybeFatal("error reading from stdin:", err)
-		r.ContentLength = int64(len(b))
-		r.Header.Set("Content-Type", "application/json")
-		r.Body = ioutil.NopCloser(bytes.NewReader(b))
+		r.Body, r.ContentLength = bodyFromStdin()
 	} else {
-		// If user passed --res.* flags, create some JSON and use that as the request body
-		s := api.Schemas[m.RequestSchema.Ref]
-		request := make(map[string]interface{})
-		for k, _ := range s.Properties {
-			f := fs.Lookup("res." + k)
-			if f == nil || f.Value.String() == "" {
-				continue
-			}
-			v := f.Value.String()
-			request[k] = toType(s.Type, v)
-		}
-		if len(request) != 0 {
-			body, err := json.Marshal(&request)
-			maybeFatal("error marshalling JSON:", err)
-			r.ContentLength = int64(len(body))
-			r.Header.Set("Content-Type", "application/json")
-			r.Body = ioutil.NopCloser(bytes.NewReader(body))
-		}
+		r.Body, r.ContentLength = bodyFromFlags(*api, m)
 	}
 
 	// Add auth header
 	if m.Scopes != nil {
 		scope := strings.Join(m.Scopes, " ")
 		if *flagPem != "" && *flagSecrets != "" {
-			tok := accessTokenFromPemFile(scope)
-			r.Header.Set("Authorization", "Bearer "+tok)
+			r.Header.Set("Authorization", "Bearer "+accessTokenFromPemFile(scope))
 		} else {
 			fmt.Println("This method requires access to protected resources")
 			fmt.Println("Visit this URL to get a token:")
@@ -345,6 +316,37 @@ func (m Method) call(api *API) {
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		os.Exit(1)
 	}
+}
+
+func bodyFromStdin() (io.ReadCloser, int64) {
+	b, err := ioutil.ReadAll(os.Stdin)
+	maybeFatal("error reading from stdin:", err)
+	return ioutil.NopCloser(bytes.NewReader(b)), int64(len(b))
+}
+
+func bodyFromFile() (io.ReadCloser, int64) {
+	b, err := ioutil.ReadFile(*flagInFile)
+	maybeFatal("error opening file:", err)
+	return ioutil.NopCloser(bytes.NewReader(b)), int64(len(b))
+}
+
+func bodyFromFlags(api API, m Method) (io.ReadCloser, int64) {
+	s := api.Schemas[m.RequestSchema.Ref]
+	request := make(map[string]interface{})
+	for k, _ := range s.Properties {
+		f := fs.Lookup("res." + k)
+		if f == nil || f.Value.String() == "" {
+			continue
+		}
+		v := f.Value.String()
+		request[k] = toType(s.Type, v)
+	}
+	if len(request) != 0 {
+		body, err := json.Marshal(&request)
+		maybeFatal("error marshalling JSON:", err)
+		return ioutil.NopCloser(bytes.NewReader(body)), int64(len(body))
+	}
+	return nil, 0
 }
 
 func toType(t, v string) interface{} {
