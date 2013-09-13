@@ -1,6 +1,7 @@
 googlecl.go: A Go rewrite of Google API CLI tool
 ================================================
 (original Python googlecl script is at https://code.google.com/p/googlecl)
+
 [![Build Status](https://travis-ci.org/ImJasonH/googlecl.png?branch=master)](https://travis-ci.org/ImJasonH/googlecl)
 
 Getting Help
