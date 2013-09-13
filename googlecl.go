@@ -333,13 +333,13 @@ func bodyFromFile() (io.ReadCloser, int64) {
 func bodyFromFlags(api API, m Method) (io.ReadCloser, int64) {
 	s := api.Schemas[m.RequestSchema.Ref]
 	request := make(map[string]interface{})
-	for k, _ := range s.Properties {
+	for k, p := range s.Properties {
 		f := fs.Lookup("res." + k)
 		if f == nil || f.Value.String() == "" {
 			continue
 		}
 		v := f.Value.String()
-		request[k] = toType(s.Type, v)
+		request[k] = toType(p.Type, v)
 	}
 	if len(request) != 0 {
 		body, err := json.Marshal(&request)
