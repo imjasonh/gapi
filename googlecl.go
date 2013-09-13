@@ -72,7 +72,7 @@ func help() {
 		fmt.Println("More information:", api.DocumentationLink)
 		fmt.Println("Methods:")
 		for _, m := range api.Methods {
-			fmt.Println(m.ID, m.Description)
+			fmt.Println("-", m.ID, m.Description)
 		}
 		type pair struct {
 			k string
@@ -85,7 +85,7 @@ func help() {
 		for i := 0; i < len(l); i++ {
 			r := l[i].r
 			for _, m := range r.Methods {
-				fmt.Printf("%s - %s\n", m.ID[len(api.Name)+1:], m.Description)
+				fmt.Printf("- %s: %s\n", m.ID[len(api.Name)+1:], m.Description)
 			}
 			for k, r := range r.Resources {
 				l = append(l, pair{k, r})
@@ -120,7 +120,7 @@ func list() {
 	getAndParse("discovery/v1/apis", &directory)
 	fmt.Println("Available methods:")
 	for _, i := range directory.Items {
-		fmt.Printf("%s %s - %s\n", i.Name, i.Version, i.Description)
+		fmt.Printf("- %s %s - %s\n", i.Name, i.Version, i.Description)
 	}
 }
 
