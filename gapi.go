@@ -24,12 +24,12 @@ import (
 
 var (
 	// Flags that get parsed before the command, necessary for loading Cloud Endpoints APIs
-	// e.g., "googlecl --endpoint=foo help myapi" parses the endpoint flag before loading the API
+	// e.g., "gapi --endpoint=foo help myapi" parses the endpoint flag before loading the API
 	endpointFs   = flag.NewFlagSet("endpoint", flag.ExitOnError)
 	flagEndpoint = endpointFs.String("endpoint", "https://www.googleapis.com/", "Cloud Endpoints URL, e.g., https://my-app-id.appspot.com/_ah/api/")
 
 	// Flags that get parsed after the command, common to all APIs
-	fs          = flag.NewFlagSet("googlecl", flag.ExitOnError)
+	fs          = flag.NewFlagSet("gapi", flag.ExitOnError)
 	flagPem     = fs.String("meta.pem", "", "Location of .pem file")
 	flagSecrets = fs.String("meta.secrets", "", "Location of client_secrets.json")
 	flagInFile  = fs.String("meta.inFile", "", "File to pass as request body")
@@ -54,7 +54,7 @@ func maybeFatal(msg string, err error) {
 func simpleHelp() {
 	fmt.Println("Makes requests to Google APIs")
 	fmt.Println("Usage:")
-	fmt.Println("  googlecl <api> <method> --param=foo")
+	fmt.Println("  gapi <api> <method> --param=foo")
 }
 
 func help() {
@@ -67,7 +67,7 @@ func help() {
 	apiName := args[1]
 	api := loadAPI(apiName)
 	if nargs == 2 {
-		// googlecl help <api>
+		// gapi help <api>
 		fmt.Println(api.Title, api.Description)
 		fmt.Println("More information:", api.DocumentationLink)
 		fmt.Println("Methods:")
@@ -92,7 +92,7 @@ func help() {
 			}
 		}
 	} else {
-		// googlecl help <api> <method>
+		// gapi help <api> <method>
 		method := args[2]
 		m := findMethod(method, *api)
 		fmt.Println(method, m.Description)
@@ -148,7 +148,7 @@ func main() {
 
 	if len(endpointFs.Args()) == 1 {
 		fmt.Println("Must specify a method to call")
-		fmt.Printf("Run \"googlecl help %s\" to see a list of available methods\n", cmd)
+		fmt.Printf("Run \"gapi help %s\" to see a list of available methods\n", cmd)
 		return
 	}
 	method := endpointFs.Args()[1]

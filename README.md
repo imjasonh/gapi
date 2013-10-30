@@ -1,15 +1,13 @@
-googlecl.go: A Go rewrite of Google API CLI tool
+gapi.go: A Go rewrite of Google API CLI tool
 ================================================
 (original Python googlecl script is at https://code.google.com/p/googlecl)
-
-[![Build Status](https://travis-ci.org/ImJasonH/googlecl.png?branch=master)](https://travis-ci.org/ImJasonH/googlecl)
 
 Getting Help
 ------------
 
 List available APIs
 ```
-$ go run googlecl.go list
+$ go run gapi.go list
 adexchangebuyer v1 - Lets you manage your Ad Exchange Buyer account.
 adexchangebuyer v1.1 - Lets you manage your Ad Exchange Buyer account.
 ...
@@ -17,7 +15,7 @@ adexchangebuyer v1.1 - Lets you manage your Ad Exchange Buyer account.
 
 Get information about a specific API
 ```
-$ go run googlecl.go help calendar
+$ go run gapi.go help calendar
 Calendar API Lets you manipulate events and other calendar data.
 More information: https://developers.google.com/google-apps/calendar/firstapp
 Methods:
@@ -26,7 +24,7 @@ Methods:
 
 Get information about a specific method
 ```
-$ go run googlecl.go help calendar events.list
+$ go run gapi.go help calendar events.list
 events.list Returns events on the specified calendar.
 Parameters:
 ...
@@ -39,41 +37,41 @@ API requests print JSON to stdout. Users can use a tool like [jq][1] to slice an
 
 Get a resource
 ```
-$ go run googlecl.go urlshortener url.get --shortUrl=http://goo.gl/fUhtIm
+$ go run gapi.go urlshortener url.get --shortUrl=http://goo.gl/fUhtIm
 {
  "kind": "urlshortener#url",
  "id": "http://goo.gl/fUhtIm",
- "longUrl": "https://github.com/ImJasonH/googlecl/",
+ "longUrl": "https://github.com/ImJasonH/gapi/",
  "status": "OK"
 }
 ```
 
 Get certain fields of a resource
 ```
-$ go run googlecl.go urlshortener url.get --shortUrl=http://goo.gl/fUhtIm --fields=longUrl
+$ go run gapi.go urlshortener url.get --shortUrl=http://goo.gl/fUhtIm --fields=longUrl
 {
- "longUrl": "https://github.com/ImJasonH/googlecl/",
+ "longUrl": "https://github.com/ImJasonH/gapi/",
 }
 ```
 
 Insert a new resource
 ```
-$ go run googlecl.go urlshortener url.insert --meta.pem=example.pem --meta.secrets=client_secrets.json --meta.inFile=url.json
+$ go run gapi.go urlshortener url.insert --meta.pem=example.pem --meta.secrets=client_secrets.json --meta.inFile=url.json
 {
  "kind": "urlshortener#url",
  "id": "http://goo.gl/POIxRL",
- "longUrl": "https://github.com/ImJasonH/googlecl"
+ "longUrl": "https://github.com/ImJasonH/gapi"
 }
 ```
 or
 ```
-$ echo '{"longUrl":"https://github.com/ImJasonH/googlecl"}' | go run googlecl.go urlshortener url.insert --meta.pem=example.pem --meta.secrets=client_secrets.json --meta.in
+$ echo '{"longUrl":"https://github.com/ImJasonH/gapi"}' | go run gapi.go urlshortener url.insert --meta.pem=example.pem --meta.secrets=client_secrets.json --meta.in
 ```
-(Make sure to pass the --meta.in flag to tell googlecl to read from stdin)
+(Make sure to pass the --meta.in flag to tell gapi to read from stdin)
 
 or, for simple request bodies
 ```
-$ go run googlecl.go urlshortener url.insert --meta.pem=example.pem --meta.secrets=client_secrets.json --res.longUrl=https://github.com/ImJasonH/googlecl
+$ go run gapi.go urlshortener url.insert --meta.pem=example.pem --meta.secrets=client_secrets.json --res.longUrl=https://github.com/ImJasonH/gapi
 ```
 (This syntax is currently only supported for top-level request fields)
 
@@ -83,13 +81,13 @@ Cloud Endpoints APIs
 To use [Cloud Endpoints APIs][2], pass the `--endpoint=` flag _before_ the command or method to invoke, like so:
 
 ```
-$ go run googlecl.go --endpoint=https://go-endpoints.appspot.com/_ah/api/ list
+$ go run gapi.go --endpoint=https://go-endpoints.appspot.com/_ah/api/ list
 Available methods:
 ...
 ```
 
 ```
-go run googlecl.go --endpoint=https://go-endpoints.appspot.com/_ah/api/ greeting greets.list
+go run gapi.go --endpoint=https://go-endpoints.appspot.com/_ah/api/ greeting greets.list
 {
  "items": [
     ...
