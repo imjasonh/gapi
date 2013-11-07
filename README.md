@@ -1,6 +1,6 @@
-gapi.go: A Go rewrite of Google API CLI tool
+gapi.go: A command-line interface to Google APIs
 ================================================
-(original Python googlecl script is at https://code.google.com/p/googlecl -- NOTE: This is not an official Google product)
+(NOTE: This is not an official Google product)
 
 Getting Help
 ------------
