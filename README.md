@@ -1,7 +1,6 @@
 gapi.go: A Go rewrite of Google API CLI tool
 ================================================
-(original Python googlecl script is at https://code.google.com/p/googlecl)
-(NOTE: This is not an official Google product)
+(original Python googlecl script is at https://code.google.com/p/googlecl -- NOTE: This is not an official Google product)
 
 Getting Help
 ------------
