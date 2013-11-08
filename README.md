@@ -1,9 +1,15 @@
-gapi.go: A command-line interface to Google APIs
+gapi: A command-line interface to Google APIs
 ================================================
 (NOTE: This is not an official Google product)
 
-Getting Help
+Installation
 ------------
+  * [Install Go][3]
+  * `go get code.google.com/p/goauth2/oauth code.google.com/p/goauth2/oauth/jwt`
+  * `go run gapi.go ...`, or `go build gapi.go` then run `gapi ...`
+
+Learning About APIs
+-------------------
 
 List available APIs
 ```
@@ -97,3 +103,4 @@ go run gapi.go --endpoint=https://go-endpoints.appspot.com/_ah/api/ greeting gre
 
 [1]: http://stedolan.github.io/jq/
 [2]: https://developers.google.com/appengine/docs/java/endpoints/
+[3]: http://golang.org/doc/install
