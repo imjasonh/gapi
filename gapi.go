@@ -417,3 +417,25 @@ type Property struct {
 		Ref string `json:"$ref"`
 	}
 }
+
+type tokenInfo struct {
+	Scope      string
+	ExpiresIn  int    `json:"expires_in"`
+	AccessType string `json:"access_type"`
+}
+
+func getTokenInfo(tok string) (*tokenInfo, error) {
+	r, err := http.Post("https://www.googleapis.com/oauth2/v2/tokeninfo?access_token="+tok, "", nil)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Body.Close()
+	var info *tokenInfo
+	err = json.NewDecoder(r.Body).Decode(info)
+	return info, err
+}
+
+func revokeToken(tok string) error {
+	_, err := http.Get("https://accounts.google.com/o/oauth2/revoke?token=" + tok)
+	return err
+}
