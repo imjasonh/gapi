@@ -172,7 +172,7 @@ func authFinish() {
 		log.Fatal("getTokenInfo", err)
 	}
 	toks.Tok[inf.Scope] = token{
-		AccessToken: tok.AccessToken,
+		AccessToken:  tok.AccessToken,
 		RefreshToken: tok.RefreshToken,
 	}
 	if err = toks.save(); err != nil {
@@ -204,7 +204,31 @@ func authPrint() {
 		fmt.Println("No token found. Run the following command to store a token:")
 		fmt.Println("gapi auth.start", api.Name, m.ID[len(api.Name)+1:])
 	}
-		
+}
+
+func authRevoke() {
+	args := endpointFs.Args()
+	if len(args) != 3 {
+		fmt.Println("Invalid arguments, must provide API and method, e.g.:")
+		fmt.Println("  gapi auth.print <api> <method>")
+		return
+	}
+	api := loadAPI(args[1])
+	if api == nil || (len(api.Resources) == 0 && len(api.Methods) == 0) {
+		log.Fatal("Couldn't load API ", args[1])
+	}
+	m := findMethod(args[2], *api)
+	toks, err := loadTokens()
+	if err != nil {
+		log.Fatal("Could not determine token")
+	}
+	if tok, found := toks.Tok[strings.Join(m.Scopes, " ")]; found {
+		if err = revokeToken(tok.AccessToken); err != nil {
+			log.Fatal("Failed to revoke token")
+		}
+		delete(toks.Tok, strings.Join(m.Scopes, " "))
+		toks.save()
+	}
 }
 
 func main() {
@@ -231,6 +255,9 @@ func main() {
 		return
 	case "auth.print":
 		authPrint()
+		return
+	case "auth.revoke":
+		authRevoke()
 		return
 	}
 
