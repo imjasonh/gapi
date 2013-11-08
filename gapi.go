@@ -36,13 +36,15 @@ var (
 	flagStdin   = fs.Bool("meta.in", false, "Whether to use stdin as the request body")
 	flagToken   = fs.String("meta.token", "", "OAuth 2.0 access token to use")
 	oauthConfig = &oauth.Config{
-		ClientId:     "68444827642.apps.googleusercontent.com",
-		ClientSecret: "K62E0K7ldOYkwUos3GrNkzU4",
-		RedirectURL:  "urn:ietf:wg:oauth:2.0:oob",
-		Scope:        "",
-		AuthURL:      "https://accounts.google.com/o/oauth2/auth",
-		TokenURL:     "https://accounts.google.com/o/oauth2/token",
-		TokenCache:   oauth.CacheFile("tokencache"),
+		ClientId:       "68444827642.apps.googleusercontent.com",
+		ClientSecret:   "K62E0K7ldOYkwUos3GrNkzU4",
+		RedirectURL:    "urn:ietf:wg:oauth:2.0:oob",
+		AccessType:     "offline",
+		ApprovalPrompt: "force",
+		Scope:          "",
+		AuthURL:        "https://accounts.google.com/o/oauth2/auth",
+		TokenURL:       "https://accounts.google.com/o/oauth2/token",
+		TokenCache:     oauth.CacheFile("tokencache"),
 	}
 )
 
@@ -125,6 +127,46 @@ func list() {
 	}
 }
 
+func authStart() {
+	args := endpointFs.Args()
+	if len(args) != 3 {
+		fmt.Println("Invalid arguments, must provide API and method, e.g.:")
+		fmt.Println("  gapi auth.start <api> <method>")
+		return
+	}
+	api := loadAPI(args[1])
+	if api == nil || (len(api.Resources) == 0 && len(api.Methods) == 0) {
+		log.Fatal("Couldn't load API ", args[1])
+	}
+	m := findMethod(args[2], *api)
+	if m.Scopes == nil {
+		log.Fatal("Method doesn't require auth")
+	}
+	oauthConfig.Scope = strings.Join(m.Scopes, " ")
+	fmt.Println("Open a browser and visit the following URL:")
+	fmt.Println(oauthConfig.AuthCodeURL(""))
+	fmt.Println("Then run the following command with the resulting auth code:")
+	fmt.Println("gapi auth.finish <code>")
+}
+
+func authFinish() {
+	args := endpointFs.Args()
+	if len(args) != 2 {
+		fmt.Println("Invalid arguments, must provide code, e.g.:")
+		fmt.Println("  gapi auth.finish <code>")
+		return
+	}
+	code := args[1]
+	t := &oauth.Transport{Config: oauthConfig}
+	tok, err := t.Exchange(code)
+	if err != nil {
+		log.Fatal(err)
+	}
+	// TODO: Store these and read them when calling APIs.
+	fmt.Println(tok.AccessToken)
+	fmt.Println(tok.RefreshToken)
+}
+
 func main() {
 	endpointFs.Parse(os.Args[1:])
 	if len(endpointFs.Args()) == 0 {
@@ -133,12 +175,19 @@ func main() {
 	}
 
 	cmd := endpointFs.Args()[0]
-	cmds := map[string]func(){
-		"help": help,
-		"list": list,
-	}
-	if f, found := cmds[cmd]; found {
-		f()
+
+	switch cmd {
+	case "help":
+		help()
+		return
+	case "list":
+		list()
+		return
+	case "auth.start":
+		authStart()
+		return
+	case "auth.finish":
+		authFinish()
 		return
 	}
 
@@ -302,10 +351,8 @@ func (m Method) call(api *API) {
 			r.Header.Set("Authorization", "Bearer "+accessTokenFromPemFile(scope))
 		} else {
 			fmt.Println("This method requires access to protected resources")
-			fmt.Println("Visit this URL to get a token:")
-			oauthConfig.Scope = scope
-			fmt.Println(oauthConfig.AuthCodeURL(""))
-			// TODO: Handle passing the --code flag, and/or start a server and accept a ping back to localhost
+			fmt.Println("Run the following command to get an auth token:")
+			fmt.Println("gapi auth.start", api.Name, m.ID[len(api.Name)+1:])
 			return
 		}
 	}
@@ -422,6 +469,10 @@ type tokenInfo struct {
 	Scope      string
 	ExpiresIn  int    `json:"expires_in"`
 	AccessType string `json:"access_type"`
+}
+
+func (inf tokenInfo) expired() bool {
+	return inf.ExpiresIn < 0
 }
 
 func getTokenInfo(tok string) (*tokenInfo, error) {
