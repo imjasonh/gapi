@@ -181,6 +181,32 @@ func authFinish() {
 	fmt.Println("Token saved")
 }
 
+func authPrint() {
+	args := endpointFs.Args()
+	if len(args) != 3 {
+		fmt.Println("Invalid arguments, must provide API and method, e.g.:")
+		fmt.Println("  gapi auth.print <api> <method>")
+		return
+	}
+	api := loadAPI(args[1])
+	if api == nil || (len(api.Resources) == 0 && len(api.Methods) == 0) {
+		log.Fatal("Couldn't load API ", args[1])
+	}
+	m := findMethod(args[2], *api)
+	toks, err := loadTokens()
+	if err != nil {
+		log.Fatal("Could not determine token")
+	}
+	if tok, found := toks.Tok[strings.Join(m.Scopes, " ")]; found {
+		// TODO: If necessary, refresh, store, and print the new token.
+		fmt.Println(tok.AccessToken)
+	} else {
+		fmt.Println("No token found. Run the following command to store a token:")
+		fmt.Println("gapi auth.start", api.Name, m.ID[len(api.Name)+1:])
+	}
+		
+}
+
 func main() {
 	endpointFs.Parse(os.Args[1:])
 	if len(endpointFs.Args()) == 0 {
@@ -202,6 +228,9 @@ func main() {
 		return
 	case "auth.finish":
 		authFinish()
+		return
+	case "auth.print":
+		authPrint()
 		return
 	}
 
