@@ -7,6 +7,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/gob"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -44,7 +45,6 @@ var (
 		Scope:          "",
 		AuthURL:        "https://accounts.google.com/o/oauth2/auth",
 		TokenURL:       "https://accounts.google.com/o/oauth2/token",
-		TokenCache:     oauth.CacheFile("tokencache"),
 	}
 )
 
@@ -162,9 +162,23 @@ func authFinish() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// TODO: Store these and read them when calling APIs.
-	fmt.Println(tok.AccessToken)
-	fmt.Println(tok.RefreshToken)
+
+	toks, err := loadTokens()
+	if err != nil {
+		log.Fatal(err)
+	}
+	inf, err := getTokenInfo(tok.AccessToken)
+	if err != nil {
+		log.Fatal("getTokenInfo", err)
+	}
+	toks.Tok[inf.Scope] = token{
+		AccessToken: tok.AccessToken,
+		RefreshToken: tok.RefreshToken,
+	}
+	if err = toks.save(); err != nil {
+		log.Fatal("save", err)
+	}
+	fmt.Println("Token saved")
 }
 
 func main() {
@@ -350,10 +364,19 @@ func (m Method) call(api *API) {
 		if *flagPem != "" && *flagSecrets != "" {
 			r.Header.Set("Authorization", "Bearer "+accessTokenFromPemFile(scope))
 		} else {
-			fmt.Println("This method requires access to protected resources")
-			fmt.Println("Run the following command to get an auth token:")
-			fmt.Println("gapi auth.start", api.Name, m.ID[len(api.Name)+1:])
-			return
+			toks, err := loadTokens()
+			if err != nil {
+				log.Fatalf("loadTokens %+v", err)
+			}
+			if tok, found := toks.Tok[scope]; found {
+				// TODO: Check expiration and refresh if necessary
+				r.Header.Set("Authorization", "Bearer "+tok.AccessToken)
+			} else {
+				fmt.Println("This method requires access to protected resources")
+				fmt.Println("Run the following command to get an auth token:")
+				fmt.Println("gapi auth.start", api.Name, m.ID[len(api.Name)+1:])
+				return
+			}
 		}
 	}
 
@@ -481,12 +504,51 @@ func getTokenInfo(tok string) (*tokenInfo, error) {
 		return nil, err
 	}
 	defer r.Body.Close()
-	var info *tokenInfo
-	err = json.NewDecoder(r.Body).Decode(info)
-	return info, err
+	var info tokenInfo
+	err = json.NewDecoder(r.Body).Decode(&info)
+	return &info, err
 }
 
 func revokeToken(tok string) error {
 	_, err := http.Get("https://accounts.google.com/o/oauth2/revoke?token=" + tok)
 	return err
+}
+
+type tokens struct {
+	Tok map[string]token
+}
+type token struct {
+	AccessToken, RefreshToken string
+}
+
+const tokensFile = "~tokens.gob"
+
+func loadTokens() (*tokens, error) {
+	fi, err := os.Stat(tokensFile)
+	if err == os.ErrNotExist || err == io.EOF {
+		return &tokens{make(map[string]token)}, nil
+	} else if err != nil {
+		return &tokens{make(map[string]token)}, nil
+	}
+	if fi.Size() == 0 {
+		return &tokens{make(map[string]token)}, nil
+	}
+
+	f, err := os.Open(tokensFile)
+	if err != nil && err != io.EOF {
+		return &tokens{make(map[string]token)}, nil
+	}
+	defer f.Close()
+	var t tokens
+	_ = gob.NewDecoder(f).Decode(&t)
+	return &t, nil
+}
+
+func (t *tokens) save() error {
+	f, err := os.Create(tokensFile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return gob.NewEncoder(f).Encode(t)
 }

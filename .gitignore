@@ -24,3 +24,6 @@ _testmain.go
 # Secret secrets
 client_secrets.json
 *.pem
+
+# Token gobs
+~tokens.gob
