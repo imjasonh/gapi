@@ -98,13 +98,10 @@ func authRevoke() {
 	}
 	m := findMethod(args[2], *api)
 	toks, err := loadTokens()
-	if err != nil {
-		log.Fatal("Could not determine token")
-	}
+	maybeFatal("error loading tokens", err)
 	if tok, found := toks.Tok[strings.Join(m.Scopes, " ")]; found {
-		if err = revokeToken(tok.AccessToken); err != nil {
-			log.Fatal("Failed to revoke token")
-		}
+		_, err := http.Get("https://accounts.google.com/o/oauth2/revoke?token=" + tok)
+		maybeFatal("error revoking token", err)
 		delete(toks.Tok, strings.Join(m.Scopes, " "))
 		toks.save()
 	}
@@ -128,10 +125,6 @@ func getTokenInfo(tok string) (*tokenInfo, error) {
 	var info tokenInfo
 	err = json.NewDecoder(r.Body).Decode(&info)
 	return &info, err
-}
-func revokeToken(tok string) error {
-	_, err := http.Get("https://accounts.google.com/o/oauth2/revoke?token=" + tok)
-	return err
 }
 
 type tokens struct {
