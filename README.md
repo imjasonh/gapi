@@ -6,14 +6,14 @@ Installation
 ------------
   * [Install Go][3]
   * `go get code.google.com/p/goauth2/oauth code.google.com/p/goauth2/oauth/jwt`
-  * `go run gapi.go ...`, or `go build gapi.go` then run `gapi ...`
+  * `go build gapi.go auth.go`, then run `gapi` as described below
 
 Learning About APIs
 -------------------
 
 List available APIs
 ```
-$ go run gapi.go list
+$ gapi list
 adexchangebuyer v1 - Lets you manage your Ad Exchange Buyer account.
 adexchangebuyer v1.1 - Lets you manage your Ad Exchange Buyer account.
 ...
@@ -21,7 +21,7 @@ adexchangebuyer v1.1 - Lets you manage your Ad Exchange Buyer account.
 
 Get information about a specific API
 ```
-$ go run gapi.go help calendar
+$ gapi help calendar
 Calendar API Lets you manipulate events and other calendar data.
 More information: https://developers.google.com/google-apps/calendar/firstapp
 Methods:
@@ -30,7 +30,7 @@ Methods:
 
 Get information about a specific method
 ```
-$ go run gapi.go help calendar events.list
+$ gapi help calendar events.list
 events.list Returns events on the specified calendar.
 Parameters:
 ...
@@ -43,7 +43,7 @@ API requests print JSON to stdout. Users can use a tool like [jq][1] to slice an
 
 Get a resource
 ```
-$ go run gapi.go urlshortener url.get --shortUrl=http://goo.gl/fUhtIm
+$ gapi urlshortener url.get --shortUrl=http://goo.gl/fUhtIm
 {
  "kind": "urlshortener#url",
  "id": "http://goo.gl/fUhtIm",
@@ -54,7 +54,7 @@ $ go run gapi.go urlshortener url.get --shortUrl=http://goo.gl/fUhtIm
 
 Get certain fields of a resource
 ```
-$ go run gapi.go urlshortener url.get --shortUrl=http://goo.gl/fUhtIm --fields=longUrl
+$ gapi urlshortener url.get --shortUrl=http://goo.gl/fUhtIm --fields=longUrl
 {
  "longUrl": "https://github.com/ImJasonH/gapi/",
 }
@@ -71,7 +71,7 @@ Pass the `.pem` and `client_secrets.json` to `gapi` using the `--meta.pem` and `
 
 Insert a new resource
 ```
-$ go run gapi.go urlshortener url.insert --meta.pem=example.pem --meta.secrets=client_secrets.json --meta.inFile=url.json
+$ gapi urlshortener url.insert --meta.pem=example.pem --meta.secrets=client_secrets.json --meta.inFile=url.json
 {
  "kind": "urlshortener#url",
  "id": "http://goo.gl/POIxRL",
@@ -80,13 +80,13 @@ $ go run gapi.go urlshortener url.insert --meta.pem=example.pem --meta.secrets=c
 ```
 (This reads the HTTP request body from the file specified by `--meta.inFile`)
 ```
-$ echo '{"longUrl":"https://github.com/ImJasonH/gapi"}' | go run gapi.go urlshortener url.insert --meta.pem=example.pem --meta.secrets=client_secrets.json --meta.in
+$ echo '{"longUrl":"https://github.com/ImJasonH/gapi"}' | gapi urlshortener url.insert --meta.pem=example.pem --meta.secrets=client_secrets.json --meta.in
 ```
 (Make sure to pass the `--meta.in` flag to tell `gapi` to read from stdin)
 
 or, for simple request bodies
 ```
-$ go run gapi.go urlshortener url.insert --meta.pem=example.pem --meta.secrets=client_secrets.json --res.longUrl=https://github.com/ImJasonH/gapi
+$ gapi urlshortener url.insert --meta.pem=example.pem --meta.secrets=client_secrets.json --res.longUrl=https://github.com/ImJasonH/gapi
 ```
 (This syntax is currently only supported for top-level request fields)
 
@@ -96,10 +96,10 @@ Authentication using OAuth
 To access private resources belonging to a user (e.g., you, a real person), you must grant access to `gapi` using the OAuth protocol.
 
 First, start an OAuth flow by calling
-`go run gapi.go auth.start <api> <method>`
+`gapi auth.start <api> <method>`
 
 This will generate a URL to go to to grant access, and will result in an authorization code being displayed in your browser. Copy that code and pass it into the following command:
-`go run gapi.go auth.finish <code>`
+`gapi auth.finish <code>`
 
 This will save your user credentials in a file called `~tokens.gob`, and future requests requiring access to private resources will attempt to use the relevant token saved in the file. If no such token is found, you will be instructed to run `auth.start` again.
 
@@ -111,13 +111,13 @@ Cloud Endpoints APIs
 To use [Cloud Endpoints APIs][2], pass the `--endpoint=` flag _before_ the command or method to invoke, like so:
 
 ```
-$ go run gapi.go --endpoint=https://go-endpoints.appspot.com/_ah/api/ list
+$ gapi --endpoint=https://go-endpoints.appspot.com/_ah/api/ list
 Available methods:
 ...
 ```
 
 ```
-go run gapi.go --endpoint=https://go-endpoints.appspot.com/_ah/api/ greeting greets.list
+gapi --endpoint=https://go-endpoints.appspot.com/_ah/api/ greeting greets.list
 {
  "items": [
     ...

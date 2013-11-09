@@ -1,7 +1,7 @@
 set -e
 set -x
 
-go build gapi.go
+go build gapi.go auth.go
 
 # Test help commands
 ./gapi | grep "Makes requests to Google APIs"
