@@ -100,7 +100,7 @@ func authRevoke() {
 	toks, err := loadTokens()
 	maybeFatal("error loading tokens", err)
 	if tok, found := toks.Tok[strings.Join(m.Scopes, " ")]; found {
-		_, err := http.Get("https://accounts.google.com/o/oauth2/revoke?token=" + tok)
+		_, err := http.Get("https://accounts.google.com/o/oauth2/revoke?token=" + tok.AccessToken)
 		maybeFatal("error revoking token", err)
 		delete(toks.Tok, strings.Join(m.Scopes, " "))
 		toks.save()
