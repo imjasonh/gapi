@@ -5,7 +5,7 @@ gapi: A command-line interface to Google APIs
 Installation
 ------------
   * [Install Go][3]
-  * `go get code.google.com/p/goauth2/oauth code.google.com/p/goauth2/oauth/jwt`
+  * `go get github.com/ImJasonH/gapi`
   * `go build gapi.go auth.go`, then run `gapi` as described below
 
 Learning About APIs
