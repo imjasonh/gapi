@@ -85,7 +85,7 @@ func help() {
 		for i := 0; i < len(l); i++ {
 			r := l[i].r
 			for _, m := range r.Methods {
-				fmt.Printf("- %s: %s\n", m.ID[len(api.Name)+1:], m.Description)
+				fmt.Printf("- %s: %s\n", m.ID[strings.Index(m.ID, ".")+1:], m.Description)
 			}
 			for k, r := range r.Resources {
 				l = append(l, pair{k, r})
